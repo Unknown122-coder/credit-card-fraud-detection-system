@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  fraud-detection-system:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: fraud-detection:latest
+    container_name: fraud-detector-app
+    ports:
+      - "7860:7860"  # Streamlit UI
+      - "8000:8000"  # FastAPI Direct Access
+    environment:
+      - API_URL=http://127.0.0.1:8000
+      - LOG_LEVEL=INFO
+    volumes:
+      # Optional bind-mount for persisting model artifacts
+      - ./models/registry:/app/models/registry
+      - ./docs/figures:/app/docs/figures
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8000/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
