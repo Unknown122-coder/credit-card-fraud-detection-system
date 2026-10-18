@@ -1,0 +1,76 @@
+"""Script to generate and persist SHAP explainability artifacts."""
+
+from __future__ import annotations
+
+import logging
+from pathlib import Path
+from typing import Optional
+
+import joblib
+import pandas as pd
+
+from src.config import Settings, get_settings
+from src.data.split import load_splits
+from src.explain.shap_utils import create_explainer, generate_global_plots, save_explainer
+from src.utils.logger import get_logger
+from src.utils.seed import set_global_seed
+
+logger = get_logger(__name__)
+
+
+def generate_all_explanations(config: Optional[Settings] = None) -> None:
+    """Generate global SHAP figures and serialize TreeExplainer artifact.
+
+    Parameters
+    ----------
+    config:
+        Project configuration. Defaults to get_settings().
+    """
+    if config is None:
+        config = get_settings()
+
+    set_global_seed(config.project.seed)
+
+    model_dir = config.model_dir
+    pipeline_path = model_dir / config.artifacts.pipeline_filename
+
+    if not pipeline_path.exists():
+        logger.warning(
+            "Champion pipeline not found at %s. Please train a model first (e.g. make evaluate).",
+            pipeline_path,
+        )
+        return
+
+    logger.info("Loading champion pipeline from %s", pipeline_path)
+    pipeline = joblib.load(pipeline_path)
+
+    # Load validation data for background and explanation samples
+    _, val_df, _ = load_splits(config)
+    feature_cols = [c for c in val_df.columns if c != config.data.target_column]
+    X_val = val_df[feature_cols]
+
+    # Initialize SHAP explainer
+    explainer = create_explainer(
+        model=pipeline,
+        X_background=X_val,
+        max_samples=config.explainability.shap_background_samples,
+        seed=config.project.seed,
+    )
+
+    # Generate and save global plots
+    figures_dir = config.figures_dir
+    logger.info("Generating global SHAP visualizations in %s", figures_dir)
+    generate_global_plots(
+        explainer=explainer,
+        X_sample=X_val.sample(n=min(300, len(X_val)), random_state=config.project.seed),
+        save_dir=figures_dir,
+    )
+
+    # Serialize explainer artifact
+    explainer_path = model_dir / config.artifacts.explainer_filename
+    save_explainer(explainer, explainer_path)
+    logger.info("Saved SHAP explainer artifact → %s", explainer_path)
+
+
+if __name__ == "__main__":
+    generate_all_explanations()
