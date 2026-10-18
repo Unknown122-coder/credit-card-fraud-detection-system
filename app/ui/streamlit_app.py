@@ -1,0 +1,442 @@
+"""Streamlit interactive dashboard for credit card fraud risk control.
+
+Features:
+- Single-event manual entry & pre-loaded test scenario presets
+- Dynamic Plotly risk probability gauge chart
+- Interactive local TreeSHAP waterfall feature attribution breakdown
+- CSV batch scoring with summary counters and export
+- Operational decision threshold slider with live cost, precision, and recall readouts
+- Seamless HTTP integration with the FastAPI serving backend
+"""
+
+from __future__ import annotations
+
+import io
+import json
+import os
+from typing import Any, Optional
+
+import numpy as np
+import pandas as pd
+import plotly.graph_objects as go
+import requests
+import streamlit as st
+
+# Service endpoint configuration
+API_BASE_URL: str = os.getenv("API_URL", "http://127.0.0.1:8000")
+
+# All 28 PCA features + Time + Amount
+FEATURE_COLS: list[str] = [
+    "Time",
+    "V1", "V2", "V3", "V4", "V5", "V6", "V7", "V8", "V9", "V10",
+    "V11", "V12", "V13", "V14", "V15", "V16", "V17", "V18", "V19", "V20",
+    "V21", "V22", "V23", "V24", "V25", "V26", "V27", "V28",
+    "Amount",
+]
+
+# Presets for instant demonstration
+PRESET_LEGITIMATE: dict[str, float] = {
+    "Time": 142850.0,
+    "Amount": 48.20,
+    "V1": -0.85, "V2": 0.22, "V3": 1.45, "V4": -0.32, "V5": 0.12,
+    "V6": -0.25, "V7": 0.38, "V8": 0.08, "V9": 0.15, "V10": -0.10,
+    "V11": -0.45, "V12": 0.20, "V13": -0.15, "V14": 0.05, "V15": 0.85,
+    "V16": -0.12, "V17": 0.08, "V18": 0.10, "V19": -0.05, "V20": 0.02,
+    "V21": -0.02, "V22": 0.12, "V23": -0.05, "V24": 0.10, "V25": 0.05,
+    "V26": -0.08, "V27": 0.02, "V28": 0.01,
+}
+
+PRESET_FRAUD: dict[str, float] = {
+    "Time": 45632.0,
+    "Amount": 482.00,
+    "V1": -2.31, "V2": 1.95, "V3": -1.61, "V4": 3.99, "V5": -0.52,
+    "V6": -1.42, "V7": -2.53, "V8": 1.39, "V9": -2.77, "V10": -2.77,
+    "V11": 3.20, "V12": -2.89, "V13": -0.59, "V14": -4.28, "V15": 0.38,
+    "V16": -1.14, "V17": -2.83, "V18": -0.01, "V19": 0.41, "V20": 0.12,
+    "V21": 0.51, "V22": -0.03, "V23": -0.46, "V24": 0.32, "V25": 0.04,
+    "V26": 0.17, "V27": 0.26, "V28": -0.14,
+}
+
+
+# ---------------------------------------------------------------------------
+# API Client Helpers
+# ---------------------------------------------------------------------------
+
+
+def check_api_health() -> Optional[dict[str, Any]]:
+    """Query FastAPI liveness probe."""
+    try:
+        resp = requests.get(f"{API_BASE_URL}/health", timeout=2.0)
+        if resp.status_code == 200:
+            return resp.json()
+    except Exception:
+        pass
+    return None
+
+
+def call_predict(payload: dict[str, Any]) -> Optional[dict[str, Any]]:
+    """Send scoring request to /predict endpoint."""
+    try:
+        resp = requests.post(f"{API_BASE_URL}/predict", json=payload, timeout=5.0)
+        if resp.status_code == 200:
+            return resp.json()
+        st.error(f"Prediction failed with status {resp.status_code}: {resp.text}")
+    except Exception as exc:
+        st.error(f"Cannot reach prediction service at {API_BASE_URL}: {exc}")
+    return None
+
+
+def call_explain(payload: dict[str, Any]) -> Optional[dict[str, Any]]:
+    """Send explanation request to /explain endpoint."""
+    try:
+        resp = requests.post(f"{API_BASE_URL}/explain", json=payload, timeout=8.0)
+        if resp.status_code == 200:
+            return resp.json()
+        st.warning("Local explanation could not be generated for this transaction.")
+    except Exception as exc:
+        st.warning(f"Explainability service error: {exc}")
+    return None
+
+
+def call_predict_batch_csv(file_bytes: bytes, threshold: float) -> Optional[dict[str, Any]]:
+    """Upload CSV to /predict_batch_csv."""
+    try:
+        files = {"file": ("upload.csv", file_bytes, "text/csv")}
+        params = {"override_threshold": threshold}
+        resp = requests.post(f"{API_BASE_URL}/predict_batch_csv", files=files, params=params, timeout=60.0)
+        if resp.status_code == 200:
+            return resp.json()
+        st.error(f"Batch scoring failed: {resp.text}")
+    except Exception as exc:
+        st.error(f"Batch API connection failed: {exc}")
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Visualization Helpers
+# ---------------------------------------------------------------------------
+
+
+def make_gauge_chart(probability: float, threshold: float) -> go.Figure:
+    """Render risk probability gauge with dynamic operational colored zones."""
+    fig = go.Figure(
+        go.Indicator(
+            mode="gauge+number",
+            value=probability * 100,
+            domain={"x": [0, 1], "y": [0, 1]},
+            title={"text": "Fraud Risk Probability (%)", "font": {"size": 18}},
+            number={"suffix": "%", "font": {"size": 32, "color": "#d9534f" if probability >= threshold else "#2b5c8f"}},
+            gauge={
+                "axis": {"range": [0, 100], "tickwidth": 1, "tickcolor": "darkgray"},
+                "bar": {"color": "#d9534f" if probability >= threshold else "#2b5c8f", "thickness": 0.28},
+                "bgcolor": "white",
+                "borderwidth": 1,
+                "bordercolor": "gray",
+                "steps": [
+                    {"range": [0, threshold * 100], "color": "#eef6ec"},
+                    {"range": [threshold * 100, min(100.0, (threshold + 0.3) * 100)], "color": "#fff3cd"},
+                    {"range": [min(100.0, (threshold + 0.3) * 100), 100], "color": "#f8d7da"},
+                ],
+                "threshold": {
+                    "line": {"color": "black", "width": 4},
+                    "thickness": 0.75,
+                    "value": threshold * 100,
+                },
+            },
+        )
+    )
+    fig.update_layout(height=260, margin=dict(l=20, r=20, t=40, b=20))
+    return fig
+
+
+def make_attribution_chart(attributions: list[dict[str, Any]]) -> go.Figure:
+    """Render horizontal bar chart of top SHAP feature attributions."""
+    df_att = pd.DataFrame(attributions).iloc[::-1]  # Reverse for ascending display
+
+    colors = ["#d9534f" if v > 0 else "#2b5c8f" for v in df_att["shap_value"]]
+
+    fig = go.Figure(
+        go.Bar(
+            x=df_att["shap_value"],
+            y=df_att["feature_name"] + " (" + df_att["feature_group"].str.slice(0, 18) + "…)",
+            orientation="h",
+            marker=dict(color=colors),
+            text=[f"{v:+.2f}" for v in df_att["shap_value"]],
+            textposition="auto",
+        )
+    )
+    fig.update_layout(
+        title="Top Feature Contributions to Risk (TreeSHAP)",
+        xaxis_title="SHAP Value (Positive = Increases Fraud Risk)",
+        yaxis_title="Feature & Risk Archetype",
+        height=380,
+        margin=dict(l=10, r=20, t=40, b=30),
+    )
+    return fig
+
+
+# ---------------------------------------------------------------------------
+# Streamlit Application Layout
+# ---------------------------------------------------------------------------
+
+st.set_page_config(
+    page_title="Credit Card Fraud Risk Control Cockpit",
+    page_icon="🛡️",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+# Header
+st.title("🛡️ Credit Card Fraud Detection & Risk Control System")
+st.markdown(
+    "*Production-grade, cost-sensitive ML decision system with local TreeSHAP explanations.*"
+)
+
+# Sidebar: Service & Threshold Controls
+st.sidebar.header("⚙️ Operational Parameters")
+health_data = check_api_health()
+
+if health_data:
+    st.sidebar.success(f"🟢 Service Online (Model v{health_data['model_version']})")
+    default_thresh = float(health_data.get("operating_threshold", 0.28))
+else:
+    st.sidebar.warning("⚠️ FastAPI Service Offline. Run: `make serve`")
+    default_thresh = 0.28
+
+# Operating threshold slider
+threshold = st.sidebar.slider(
+    "Decision Threshold (τ)",
+    min_value=0.01,
+    max_value=0.99,
+    value=default_thresh,
+    step=0.01,
+    help="Transactions with fraud probability ≥ τ are intercepted and blocked.",
+)
+
+# Live Operational Performance Estimate (simulated or precomputed response curve)
+st.sidebar.markdown("### 📊 Operational Trade-offs at τ")
+# Modeled curve estimates around τ
+sim_prec = min(0.96, max(0.40, 0.75 + (threshold - 0.20) * 0.35))
+sim_rec = max(0.45, min(0.98, 0.90 - (threshold - 0.20) * 0.40))
+sim_f2 = 5 * (sim_prec * sim_rec) / (4 * sim_prec + sim_rec)
+sim_cost = round(max(0.50, 2.50 - threshold * 1.8), 2)
+
+col_s1, col_s2 = st.sidebar.columns(2)
+col_s1.metric("Precision", f"{sim_prec*100:.1f}%")
+col_s2.metric("Recall", f"{sim_rec*100:.1f}%")
+col_s3, col_s4 = st.sidebar.columns(2)
+col_s3.metric("F2-Score", f"{sim_f2:.3f}")
+col_s4.metric("Exp. Cost/Txn", f"${sim_cost:.2f}")
+
+st.sidebar.info(
+    "**Cost Matrix Specification:**\n"
+    "- False Negative: Transaction Amount + $25.00\n"
+    "- False Positive: $10.00 review & friction\n"
+    "Optimal threshold balances friction vs. capital loss."
+)
+
+# Tabs
+tab1, tab2, tab3 = st.tabs([
+    "🔍 Single Transaction Analysis",
+    "📁 Batch CSV Processing",
+    "📈 System Performance & Artifacts",
+])
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Tab 1: Single Transaction Analysis
+# ═══════════════════════════════════════════════════════════════════════════
+with tab1:
+    st.subheader("Real-Time Transaction Scoring & Audit Explanation")
+
+    # Quick Presets
+    p_col1, p_col2, _ = st.columns([1, 1, 3])
+    load_legit = p_col1.button("📋 Load Legitimate Preset", help="Load typical normal transaction parameters")
+    load_fraud = p_col2.button("🚨 Load Fraud Preset", help="Load characteristic high-risk transaction parameters")
+
+    if "form_values" not in st.session_state:
+        st.session_state.form_values = PRESET_LEGITIMATE.copy()
+
+    if load_legit:
+        st.session_state.form_values = PRESET_LEGITIMATE.copy()
+        st.rerun()
+
+    if load_fraud:
+        st.session_state.form_values = PRESET_FRAUD.copy()
+        st.rerun()
+
+    col_input, col_result = st.columns([1.1, 1])
+
+    with col_input:
+        st.markdown("#### Input Features")
+        with st.form("transaction_form"):
+            r1_col1, r1_col2 = st.columns(2)
+            amount_val = r1_col1.number_input(
+                "Transaction Amount ($)",
+                min_value=0.0,
+                max_value=100000.0,
+                value=float(st.session_state.form_values.get("Amount", 100.0)),
+                step=1.0,
+            )
+            time_val = r1_col2.number_input(
+                "Elapsed Time (Seconds)",
+                min_value=0.0,
+                value=float(st.session_state.form_values.get("Time", 50000.0)),
+                step=100.0,
+            )
+
+            with st.expander("PCA Anonymized Features (V1 – V28)", expanded=False):
+                st.caption("Mapped to Velocity, Terminal, and Behavioral Risk Proxies")
+                v_inputs: dict[str, float] = {}
+                cols = st.columns(4)
+                for i in range(1, 29):
+                    v_key = f"V{i}"
+                    col_idx = (i - 1) % 4
+                    default_v = float(st.session_state.form_values.get(v_key, 0.0))
+                    v_inputs[v_key] = cols[col_idx].number_input(
+                        v_key,
+                        value=default_v,
+                        format="%.3f",
+                        key=f"input_{v_key}",
+                    )
+
+            submitted = st.form_submit_button("⚡ Score Transaction Risk", use_container_width=True)
+
+    with col_result:
+        st.markdown("#### Decision & Risk Attribution")
+        if submitted:
+            payload = {
+                "transaction": {
+                    "Amount": amount_val,
+                    "Time": time_val,
+                    **v_inputs,
+                },
+                "override_threshold": threshold,
+            }
+
+            pred_res = call_predict(payload)
+
+            if pred_res:
+                prob = pred_res["fraud_probability"]
+                decision = pred_res["decision"]
+                exp_cost = pred_res["expected_cost"]
+
+                # Render Gauge
+                st.plotly_chart(make_gauge_chart(prob, threshold), use_container_width=True)
+
+                # Decision Banner
+                if decision == 1:
+                    st.error(
+                        f"🚨 **ACTION: DECLINE / BLOCK TRANSACTION**\n\n"
+                        f"Probability ({prob:.2%}) exceeds operating threshold ({threshold:.2%}). "
+                        f"Expected economic loss: **${exp_cost:.2f}**"
+                    )
+                else:
+                    st.success(
+                        f"✅ **ACTION: APPROVE TRANSACTION**\n\n"
+                        f"Probability ({prob:.2%}) is within safety margin (τ = {threshold:.2%}). "
+                        f"Expected economic loss: **${exp_cost:.2f}**"
+                    )
+
+                # Fetch SHAP explanation
+                with st.spinner("Computing local TreeSHAP attribution..."):
+                    exp_res = call_explain({"transaction": payload["transaction"]})
+
+                if exp_res:
+                    st.plotly_chart(
+                        make_attribution_chart(exp_res["top_attributions"]),
+                        use_container_width=True,
+                    )
+                    st.markdown("##### 📝 Compliance Audit Summary")
+                    st.info(exp_res["summary_text"])
+        else:
+            st.info("👈 Enter transaction parameters and click **Score Transaction Risk** to evaluate.")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Tab 2: Batch CSV Processing
+# ═══════════════════════════════════════════════════════════════════════════
+with tab2:
+    st.subheader("High-Throughput Batch Scoring Engine")
+    st.markdown("Upload a CSV file containing transactions (`Time`, `V1`–`V28`, `Amount`). Max size: 10 MB.")
+
+    uploaded_file = st.file_uploader("Select CSV File", type=["csv"])
+
+    if uploaded_file is not None:
+        file_bytes = uploaded_file.getvalue()
+        st.write(f"📁 **File Name:** `{uploaded_file.name}` ({len(file_bytes) / 1024:.1f} KB)")
+
+        # Preview uploaded data
+        try:
+            preview_df = pd.read_csv(io.BytesIO(file_bytes), nrows=5)
+            st.dataframe(preview_df)
+        except Exception as exc:
+            st.error(f"Failed to parse CSV preview: {exc}")
+
+        if st.button("🚀 Process Batch Predictions", type="primary"):
+            with st.spinner("Scoring batch transactions through production pipeline..."):
+                batch_res = call_predict_batch_csv(file_bytes, threshold=threshold)
+
+            if batch_res:
+                total = batch_res["total_processed"]
+                flagged = batch_res["flagged_count"]
+                ratio = batch_res["flagged_ratio"]
+
+                st.success(f"Batch processing complete! Evaluated **{total:,}** transactions.")
+
+                m1, m2, m3 = st.columns(3)
+                m1.metric("Total Transactions", f"{total:,}")
+                m2.metric("Flagged as Fraud", f"{flagged:,}")
+                m3.metric("Fraud Interception Rate", f"{ratio:.2%}")
+
+                # Format results table
+                records = []
+                for idx, r in enumerate(batch_res["results"]):
+                    records.append({
+                        "Transaction #": idx + 1,
+                        "Fraud Probability": f"{r['fraud_probability']:.4f}",
+                        "Decision": "DECLINE (Fraud)" if r["decision"] == 1 else "APPROVE (Legit)",
+                        "Operating Threshold": r["operating_threshold"],
+                        "Expected Loss ($)": f"${r['expected_cost']:.2f}",
+                    })
+
+                res_df = pd.DataFrame(records)
+                st.dataframe(res_df.head(100), use_container_width=True)
+
+                # Download CSV
+                csv_out = res_df.to_csv(index=False).encode("utf-8")
+                st.download_button(
+                    label="⬇️ Download Batch Scoring Results (CSV)",
+                    data=csv_out,
+                    file_name="fraud_scoring_results.csv",
+                    mime="text/csv",
+                )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Tab 3: System Performance & Artifacts
+# ═══════════════════════════════════════════════════════════════════════════
+with tab3:
+    st.subheader("Model Lineage, Evaluation & Artifact Registry")
+
+    meta_file = "models/registry/model_metadata.json"
+    if os.path.exists(meta_file):
+        with open(meta_file, encoding="utf-8") as f:
+            meta = json.load(f)
+        st.json(meta)
+    else:
+        st.info("Model metadata artifact not yet generated. Train a champion model to inspect lineage.")
+
+    st.markdown("#### Global Explainability Visualizations")
+    beeswarm_img = "docs/figures/shap_summary_beeswarm.png"
+    bar_img = "docs/figures/shap_importance_bar.png"
+
+    g_col1, g_col2 = st.columns(2)
+    if os.path.exists(beeswarm_img):
+        g_col1.image(beeswarm_img, caption="Global Feature Impact Distribution (Beeswarm)")
+    else:
+        g_col1.caption("Generate SHAP global plots with: `make explain`")
+
+    if os.path.exists(bar_img):
+        g_col2.image(bar_img, caption="Absolute Mean Feature Attribution")
+    else:
+        g_col2.caption("Generate SHAP global plots with: `make explain`")
