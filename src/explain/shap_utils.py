@@ -99,7 +99,32 @@ def create_explainer(
     shap.Explainer
         Fitted SHAP explainer (TreeExplainer when possible).
     """
-    # If model is a pipeline, extract the final classifier
+def transform_features_through_pipeline(model: Any, X: pd.DataFrame | np.ndarray) -> np.ndarray:
+    """Transform features through all pipeline steps prior to the final classifier.
+
+    Ensures that TreeExplainer evaluates features in the exact numerical space
+    (e.g., scaled by RobustScaler) on which the tree estimator was trained.
+    """
+    if hasattr(model, "steps") and len(model.steps) > 1:
+        X_trans = X
+        for name, step in model.steps[:-1]:
+            if hasattr(step, "transform"):
+                X_trans = step.transform(X_trans)
+        return np.asarray(X_trans)
+    return np.asarray(X)
+
+
+def create_explainer(
+    model: BaseEstimator,
+    X_background: pd.DataFrame | np.ndarray,
+    max_samples: int = 100,
+    seed: int = 42,
+) -> shap.Explainer:
+    """Create a SHAP explainer instance with memory-bounded background samples.
+
+    Extracts the underlying tree estimator and transforms the background data
+    through the pipeline's preprocessing steps to guarantee attribution validity.
+    """
     estimator = model
     if hasattr(model, "named_steps"):
         if "classifier" in model.named_steps:
@@ -122,16 +147,25 @@ def create_explainer(
         else:
             bg_data = bg_arr
 
-    logger.info("Initializing SHAP explainer on estimator %s with %d background rows", type(estimator).__name__, len(bg_data))
+    # Preprocess background through pipeline transformers (e.g. RobustScaler)
+    transformed_bg = transform_features_through_pipeline(model, bg_data)
+
+    logger.info(
+        "Initializing SHAP explainer on estimator %s with %d background rows",
+        type(estimator).__name__,
+        len(bg_data),
+    )
 
     try:
-        # Prefer TreeExplainer for boosted trees and random forests
-        explainer = shap.TreeExplainer(estimator, data=bg_data)
-        logger.info("Created TreeExplainer successfully")
+        explainer = shap.TreeExplainer(estimator, data=transformed_bg)
+        logger.info("Created TreeExplainer successfully on transformed background space")
         return explainer
     except Exception as exc:
         logger.warning("TreeExplainer failed (%s). Falling back to shap.Explainer", exc)
-        return shap.Explainer(estimator.predict_proba if hasattr(estimator, "predict_proba") else estimator, bg_data)
+        return shap.Explainer(
+            estimator.predict_proba if hasattr(estimator, "predict_proba") else estimator,
+            transformed_bg,
+        )
 
 
 def compute_shap_values(
@@ -237,6 +271,7 @@ def compute_local_explanation(
     explainer: shap.Explainer,
     X_single: pd.DataFrame,
     top_n: int = 10,
+    pipeline: Optional[Any] = None,
 ) -> dict[str, Any]:
     """Compute local SHAP explanation and return formatted attributions for UI/API.
 
@@ -248,13 +283,21 @@ def compute_local_explanation(
         Single-row DataFrame of features.
     top_n:
         Number of top contributing features to highlight.
+    pipeline:
+        Optional trained pipeline whose preprocessing transformers will be applied
+        to align the evaluation vector with the tree estimator's feature space.
 
     Returns
     -------
     dict[str, Any]
         Structured explanation payload.
     """
-    shap_vals = compute_shap_values(explainer, X_single)[0]
+    if pipeline is not None:
+        X_eval = transform_features_through_pipeline(pipeline, X_single)
+    else:
+        X_eval = X_single
+
+    shap_vals = compute_shap_values(explainer, X_eval)[0]
 
     # Expected value (base value)
     base_val = explainer.expected_value
