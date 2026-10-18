@@ -83,6 +83,17 @@ def create_feature_schema(X_train: pd.DataFrame) -> dict[str, Any]:
     return schema
 
 
+import hashlib
+
+def compute_sha256(file_path: Path) -> str:
+    """Calculate cryptographic SHA-256 hash of an artifact on disk."""
+    hasher = hashlib.sha256()
+    with open(file_path, "rb") as f:
+        while chunk := f.read(65536):
+            hasher.update(chunk)
+    return hasher.hexdigest()
+
+
 def save_model_artifacts(
     pipeline: Any,
     calibrator: Optional[Any],
@@ -93,7 +104,7 @@ def save_model_artifacts(
     explainer: Optional[Any] = None,
     output_dir: Optional[str | Path] = None,
 ) -> dict[str, Any]:
-    """Persist all production deployment artifacts to disk.
+    """Persist all production deployment artifacts to disk with SHA-256 integrity hashes.
 
     Parameters
     ----------
@@ -129,11 +140,15 @@ def save_model_artifacts(
     pipeline_path = target_dir / config.artifacts.pipeline_filename
     joblib.dump(pipeline, pipeline_path, compress=3)
     logger.info("Saved champion pipeline → %s", pipeline_path)
+    checksums: dict[str, str] = {
+        "pipeline_sha256": compute_sha256(pipeline_path),
+    }
 
     # 2. Calibrator
     if calibrator is not None:
         calibrator_path = target_dir / config.artifacts.calibrator_filename
         joblib.dump(calibrator, calibrator_path, compress=3)
+        checksums["calibrator_sha256"] = compute_sha256(calibrator_path)
         logger.info("Saved calibrator → %s", calibrator_path)
 
     # 3. Threshold Configuration
@@ -157,6 +172,7 @@ def save_model_artifacts(
     if explainer is not None:
         explainer_path = target_dir / config.artifacts.explainer_filename
         joblib.dump(explainer, explainer_path, compress=3)
+        checksums["explainer_sha256"] = compute_sha256(explainer_path)
         logger.info("Saved SHAP explainer → %s", explainer_path)
 
     # 6. Model Metadata
@@ -167,6 +183,7 @@ def save_model_artifacts(
         "git_commit": get_git_hash(),
         "python_version": platform.python_version(),
         "operating_threshold": float(threshold),
+        "checksums": checksums,
         "metrics": {k: float(v) if isinstance(v, (int, float, np.floating)) else v for k, v in metrics.items()},
         "config_snapshot": {
             "dataset_name": config.data.dataset_name,
@@ -182,28 +199,55 @@ def save_model_artifacts(
     return metadata
 
 
-def load_model_artifacts(model_dir: str | Path) -> ModelArtifacts:
-    """Load all production artifacts from directory into ModelArtifacts container.
+def load_model_artifacts(model_dir: str | Path, verify_checksums: bool = True) -> ModelArtifacts:
+    """Load all production artifacts from directory with cryptographic checksum verification.
 
     Parameters
     ----------
     model_dir:
         Directory containing serialized artifacts.
+    verify_checksums:
+        Whether to enforce SHA-256 integrity validation before unpickling.
 
     Returns
     -------
     ModelArtifacts
         Loaded pipeline, calibrator, threshold config, metadata, schema, and explainer.
+
+    Raises
+    ------
+    PermissionError
+        If artifact SHA-256 hash does not match metadata signature.
     """
     p = Path(model_dir)
+
+    metadata_file = p / "model_metadata.json"
+    metadata = json.loads(metadata_file.read_text(encoding="utf-8")) if metadata_file.exists() else {}
+    checksums = metadata.get("checksums", {})
 
     pipeline_file = p / "champion_pipeline.joblib"
     if not pipeline_file.exists():
         raise FileNotFoundError(f"Missing pipeline artifact: {pipeline_file}")
+
+    if verify_checksums and "pipeline_sha256" in checksums:
+        actual_hash = compute_sha256(pipeline_file)
+        if actual_hash != checksums["pipeline_sha256"]:
+            raise PermissionError(
+                f"Security check failed: {pipeline_file.name} SHA-256 hash mismatch! "
+                f"Expected: {checksums['pipeline_sha256']}, got: {actual_hash}. Possible tampering detected."
+            )
+
     pipeline = joblib.load(pipeline_file)
 
     calibrator_file = p / "calibrator.joblib"
-    calibrator = joblib.load(calibrator_file) if calibrator_file.exists() else None
+    if calibrator_file.exists():
+        if verify_checksums and "calibrator_sha256" in checksums:
+            actual_cal_hash = compute_sha256(calibrator_file)
+            if actual_cal_hash != checksums["calibrator_sha256"]:
+                raise PermissionError(f"Security check failed: {calibrator_file.name} SHA-256 hash mismatch!")
+        calibrator = joblib.load(calibrator_file)
+    else:
+        calibrator = None
 
     threshold_file = p / "threshold_config.json"
     if threshold_file.exists():
@@ -212,14 +256,18 @@ def load_model_artifacts(model_dir: str | Path) -> ModelArtifacts:
     else:
         threshold = 0.5
 
-    metadata_file = p / "model_metadata.json"
-    metadata = json.loads(metadata_file.read_text(encoding="utf-8")) if metadata_file.exists() else {}
-
     schema_file = p / "feature_schema.json"
     schema = json.loads(schema_file.read_text(encoding="utf-8")) if schema_file.exists() else {}
 
     explainer_file = p / "shap_explainer.joblib"
-    explainer = joblib.load(explainer_file) if explainer_file.exists() else None
+    if explainer_file.exists():
+        if verify_checksums and "explainer_sha256" in checksums:
+            actual_exp_hash = compute_sha256(explainer_file)
+            if actual_exp_hash != checksums["explainer_sha256"]:
+                raise PermissionError(f"Security check failed: {explainer_file.name} SHA-256 hash mismatch!")
+        explainer = joblib.load(explainer_file)
+    else:
+        explainer = None
 
     return ModelArtifacts(
         pipeline=pipeline,
