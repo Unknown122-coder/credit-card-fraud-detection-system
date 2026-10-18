@@ -263,27 +263,53 @@ def run_full_evaluation(
 
     results: dict[str, Any] = {}
 
-    # ── Step 1: Validation metrics at default threshold ──────────────
-    logger.info("Step 1: Computing validation metrics at threshold=0.5")
-    y_val_prob = model.predict_proba(X_val)[:, 1]
+    # ── Step 1: Validation metrics at default threshold (Uncalibrated) ──
+    logger.info("Step 1: Computing uncalibrated validation metrics at threshold=0.5")
+    y_val_prob_raw = model.predict_proba(X_val)[:, 1]
 
     val_metrics_default = compute_all_metrics(
         y_val,
-        y_val_prob,
+        y_val_prob_raw,
         threshold=0.5,
         amounts=amounts_val,
         fp_cost=eval_cfg.fp_cost,
         fn_base_cost=eval_cfg.fn_base_cost,
     )
     results["val_metrics_default"] = val_metrics_default
-    logger.info("Validation metrics (t=0.5): %s", val_metrics_default)
+    logger.info("Validation metrics uncalibrated (t=0.5): %s", val_metrics_default)
 
-    # ── Step 2: Optimal threshold on validation set ──────────────────
-    logger.info("Step 2: Finding optimal threshold on validation set")
+    # ── Step 2: Split validation partition into Calibration & Threshold splits ──
+    # Prevents in-sample calibration overfitting and ensures threshold is selected on calibrated holdout
+    from sklearn.model_selection import train_test_split
+    val_indices = np.arange(len(y_val))
+    if np.sum(y_val == 1) >= 2:
+        cal_idx, thresh_idx = train_test_split(
+            val_indices, test_size=0.5, stratify=y_val, random_state=config.project.seed
+        )
+    else:
+        cal_idx, thresh_idx = train_test_split(
+            val_indices, test_size=0.5, random_state=config.project.seed
+        )
+
+    X_val_cal, y_val_cal = X_val[cal_idx], y_val[cal_idx]
+    X_val_thresh, y_val_thresh = X_val[thresh_idx], y_val[thresh_idx]
+    amounts_val_thresh = amounts_val[thresh_idx] if amounts_val is not None else None
+
+    # ── Step 3: Calibrate model on calibration sub-split ──────────────
+    logger.info("Step 3: Calibrating model with method='%s' on calibration sub-split", eval_cfg.calibration_method)
+    calibrated_model = calibrate_model(
+        model, X_val_cal, y_val_cal, method=eval_cfg.calibration_method
+    )
+    results["calibrated_model"] = calibrated_model
+
+    # ── Step 4: Find optimal threshold on calibrated probabilities ────
+    logger.info("Step 4: Finding cost-minimizing threshold on calibrated holdout probabilities")
+    y_thresh_prob_cal = calibrated_model.predict_proba(X_val_thresh)[:, 1]
+
     optimal_threshold, min_cost = find_optimal_threshold(
-        y_val,
-        y_val_prob,
-        amounts=amounts_val,
+        y_val_thresh,
+        y_thresh_prob_cal,
+        amounts=amounts_val_thresh,
         fp_cost=eval_cfg.fp_cost,
         fn_base_cost=eval_cfg.fn_base_cost,
         n_steps=eval_cfg.threshold_steps,
@@ -292,29 +318,20 @@ def run_full_evaluation(
     results["optimal_threshold_cost"] = min_cost
 
     val_metrics_optimal = compute_all_metrics(
-        y_val,
-        y_val_prob,
+        y_val_thresh,
+        y_thresh_prob_cal,
         threshold=optimal_threshold,
-        amounts=amounts_val,
+        amounts=amounts_val_thresh,
         fp_cost=eval_cfg.fp_cost,
         fn_base_cost=eval_cfg.fn_base_cost,
     )
     results["val_metrics_optimal"] = val_metrics_optimal
     logger.info(
-        "Validation metrics (t=%.4f): %s", optimal_threshold, val_metrics_optimal
+        "Validation metrics on calibrated sub-split (t=%.4f): %s", optimal_threshold, val_metrics_optimal
     )
 
-    # ── Step 3: Calibrate model on validation set ────────────────────
-    logger.info("Step 3: Calibrating model with method='%s'", eval_cfg.calibration_method)
-    calibrated_model = calibrate_model(
-        model, X_val, y_val, method=eval_cfg.calibration_method
-    )
-    results["calibrated_model"] = calibrated_model
-
-    # ── Step 4: Calibrated validation metrics ────────────────────────
-    logger.info("Step 4: Computing calibrated validation metrics")
+    # Full validation set calibrated metrics and diagnostic calibration curve
     y_val_prob_cal = calibrated_model.predict_proba(X_val)[:, 1]
-
     val_metrics_calibrated = compute_all_metrics(
         y_val,
         y_val_prob_cal,
@@ -324,12 +341,12 @@ def run_full_evaluation(
         fn_base_cost=eval_cfg.fn_base_cost,
     )
     results["val_metrics_calibrated"] = val_metrics_calibrated
-    logger.info("Calibrated validation metrics: %s", val_metrics_calibrated)
+    logger.info("Full calibrated validation metrics: %s", val_metrics_calibrated)
 
     # Save calibration curve
     plot_calibration_curve(
         y_val,
-        y_val_prob,
+        y_val_prob_raw,
         y_val_prob_cal,
         method=eval_cfg.calibration_method,
         save_path=str(figures_dir / "calibration_curve.png"),

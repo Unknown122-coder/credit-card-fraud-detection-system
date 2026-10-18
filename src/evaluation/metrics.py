@@ -172,7 +172,14 @@ def find_optimal_threshold(
     tuple[float, float]
         ``(optimal_threshold, minimum_cost)``.
     """
-    thresholds = np.linspace(0.01, 0.99, n_steps)
+    # Sweep thresholds covering extreme low base rates (1e-4 to 0.99)
+    # using log-spaced low thresholds and linear high thresholds
+    min_prob = max(1e-4, float(np.min(y_prob[y_prob > 0])) if np.any(y_prob > 0) else 1e-4)
+    low_steps = max(20, n_steps // 4)
+    high_steps = max(20, n_steps - low_steps)
+    low_sweep = np.geomspace(min_prob, 0.05, low_steps)
+    high_sweep = np.linspace(0.05, 0.99, high_steps)
+    thresholds = np.unique(np.clip(np.concatenate(([1e-4], low_sweep, high_sweep, [0.99])), 1e-4, 0.99))
     best_threshold: float = 0.5
     best_cost: float = float("inf")
 
@@ -253,6 +260,17 @@ def bootstrap_confidence_intervals(
         "expected_cost",
         "brier_score",
     ]
+
+    if len(pos_idx) == 0 or len(neg_idx) == 0:
+        logger.warning("Bootstrap requires both classes; returning point estimates.")
+        base_metrics = compute_all_metrics(
+            y_true, y_prob, threshold, amounts, fp_cost, fn_base_cost
+        )
+        return {
+            name: (base_metrics[name], base_metrics[name], base_metrics[name])
+            for name in metric_names
+        }
+
     results: dict[str, list[float]] = {name: [] for name in metric_names}
 
     logger.info(
