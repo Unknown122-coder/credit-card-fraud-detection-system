@@ -1,0 +1,41 @@
+# Git
+.git
+.gitignore
+.github
+
+# Python & testing cache
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.coverage
+htmlcov
+coverage.xml
+
+# Virtual environments
+.venv
+venv
+env
+
+# Raw and processed datasets (never bake 150MB+ datasets into container)
+data/raw
+data/processed
+data/external
+*.csv
+*.parquet
+*.h5
+
+# Local tracking & experiment data
+mlruns
+mlflow.db
+optuna_studies
+logs/*.log
+
+# IDE & OS
+.vscode
+.idea
+.DS_Store
+Thumbs.db
