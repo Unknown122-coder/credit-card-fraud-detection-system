@@ -1,0 +1,127 @@
+# ─────────────────────────────────────────────────────────────
+# Credit Card Fraud Detection System — Configuration
+# ─────────────────────────────────────────────────────────────
+
+project:
+  name: "credit-card-fraud-detection"
+  version: "1.0.0"
+  seed: 42
+  log_level: "INFO"
+
+data:
+  # "ulb_creditcard" | "paysim" — swappable via config
+  dataset_name: "ulb_creditcard"
+  raw_path: "data/raw/creditcard.csv"
+  processed_dir: "data/processed"
+  # "time_based" | "stratified"
+  split_strategy: "time_based"
+  train_ratio: 0.70
+  val_ratio: 0.15
+  test_ratio: 0.15
+  target_column: "Class"
+  # Kaggle download slug (used by `make download-data`)
+  kaggle_dataset: "mlg-ulb/creditcardfraud"
+
+features:
+  # PCA columns are V1–V28; Time and Amount are raw
+  pca_columns:
+    - V1
+    - V2
+    - V3
+    - V4
+    - V5
+    - V6
+    - V7
+    - V8
+    - V9
+    - V10
+    - V11
+    - V12
+    - V13
+    - V14
+    - V15
+    - V16
+    - V17
+    - V18
+    - V19
+    - V20
+    - V21
+    - V22
+    - V23
+    - V24
+    - V25
+    - V26
+    - V27
+    - V28
+  raw_columns:
+    - Time
+    - Amount
+  log_transform_amount: true
+  add_hour_feature: true
+
+training:
+  cv_folds: 5
+  # For imblearn pipelines
+  resampling_strategies:
+    - "none"
+    - "class_weight"
+    - "smote"
+    - "smote_tomek"
+    - "random_undersample"
+    - "balanced_rf"
+  smote_k_neighbors: 5
+  smote_sampling_strategy: 0.1
+
+tuning:
+  n_trials: 100
+  timeout_seconds: 3600
+  pruner: "median"
+  sampler: "tpe"
+  # Per-model trial counts (override n_trials)
+  xgboost_trials: 100
+  lightgbm_trials: 100
+  catboost_trials: 75
+
+evaluation:
+  # Cost matrix parameters (USD)
+  fp_cost: 10.0
+  fn_base_cost: 25.0  # Added to transaction Amount for FN cost
+  # Threshold sweep for cost-minimization
+  threshold_steps: 1000
+  # Bootstrap for confidence intervals
+  bootstrap_iterations: 1000
+  bootstrap_confidence: 0.95
+  # Calibration
+  calibration_method: "isotonic"  # "isotonic" | "sigmoid"
+
+explainability:
+  # Max background samples for SHAP (memory control)
+  shap_background_samples: 100
+  top_features_display: 10
+  save_global_plots: true
+  figures_dir: "docs/figures"
+
+serving:
+  host: "0.0.0.0"
+  api_port: 8000
+  ui_port: 7860
+  # Maximum batch upload size in bytes (10 MB)
+  max_upload_bytes: 10485760
+  # Maximum rows in a single batch request
+  max_batch_rows: 10000
+  cors_origins:
+    - "*"
+
+mlflow:
+  tracking_uri: "sqlite:///mlflow.db"
+  experiment_name: "fraud-detection"
+  artifact_location: "mlruns"
+
+artifacts:
+  model_dir: "models/registry"
+  pipeline_filename: "champion_pipeline.joblib"
+  calibrator_filename: "calibrator.joblib"
+  threshold_filename: "threshold_config.json"
+  metadata_filename: "model_metadata.json"
+  explainer_filename: "shap_explainer.joblib"
+  feature_schema_filename: "feature_schema.json"
