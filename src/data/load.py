@@ -151,6 +151,21 @@ def load_dataset(config: Settings | None = None) -> pd.DataFrame:
     # Validate schema
     validate_schema(df, config)
 
+    # Operational deduplication policy (retain first occurrence chronologically)
+    initial_rows = len(df)
+    dup_cols = [c for c in df.columns if c != "Time"]
+    df = (
+        df.sort_values("Time", kind="mergesort")
+        .drop_duplicates(subset=dup_cols, keep="first")
+        .reset_index(drop=True)
+    )
+    n_dropped = initial_rows - len(df)
+    if n_dropped > 0:
+        logger.info(
+            "Deduplication policy applied: removed %d duplicate transaction(s) (retained first occurrence)",
+            n_dropped,
+        )
+
     # Log summary
     target = config.data.target_column
     n_total = len(df)

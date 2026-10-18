@@ -75,6 +75,18 @@ def split_data(
         )
 
     logger.info("Splitting data using '%s' strategy …", strategy)
+    dup_cols = [c for c in df.columns if c != "Time"]
+    if df.duplicated(subset=dup_cols).any():
+        logger.warning(
+            "Input DataFrame contains duplicate transactions across feature columns. "
+            "Deduplicating (keeping first occurrence chronologically) to prevent cross-split leakage."
+        )
+        df = (
+            df.sort_values("Time", kind="mergesort")
+            .drop_duplicates(subset=dup_cols, keep="first")
+            .reset_index(drop=True)
+        )
+
     train, val, test = dispatch[strategy](df, config)  # type: ignore[operator]
 
     _assert_no_overlap(train, val, test)
