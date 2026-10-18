@@ -100,11 +100,12 @@ app = FastAPI(
 
 # CORS Middleware
 _settings = get_settings()
+_is_wildcard = "*" in _settings.serving.cors_origins
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_settings.serving.cors_origins,
-    allow_credentials=True,
-    allow_methods=["*"],
+    allow_credentials=not _is_wildcard,  # Must be False if allow_origins has '*' per W3C CORS spec
+    allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -177,20 +178,17 @@ def score_dataframe(
     """
     ordered_df = df[FEATURE_COLUMNS]
 
-    # Model probability
-    pipeline = artifacts.pipeline
-    if hasattr(pipeline, "predict_proba"):
-        probs = pipeline.predict_proba(ordered_df)[:, 1]
-    else:
-        probs = pipeline.predict(ordered_df).astype(float)
-
-    # Apply calibrator if available
+    # Model probability: prioritize calibrated estimator
     if artifacts.calibrator is not None:
         try:
-            # CalibratedClassifierCV expects features or scaled array
             probs = artifacts.calibrator.predict_proba(ordered_df)[:, 1]
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Calibrator predict_proba failed (%s); falling back to base pipeline", exc)
+            probs = artifacts.pipeline.predict_proba(ordered_df)[:, 1]
+    elif hasattr(artifacts.pipeline, "predict_proba"):
+        probs = artifacts.pipeline.predict_proba(ordered_df)[:, 1]
+    else:
+        probs = artifacts.pipeline.predict(ordered_df).astype(float)
 
     decisions = (probs >= threshold).astype(int)
 
@@ -324,29 +322,81 @@ async def predict_batch_csv(
             detail="Model artifacts are not loaded on this server.",
         )
 
-    # 1. Validate file size
+    # 1. Validate file extension and MIME type
+    filename = file.filename or ""
+    valid_content_types = {"text/csv", "application/vnd.ms-excel", "text/plain", "application/csv"}
+    if not filename.lower().endswith(".csv") and file.content_type not in valid_content_types:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail="Unsupported file type. Please upload a valid CSV file (.csv).",
+        )
+
+    # 2. Validate file content and size
     contents = await file.read()
+    if len(contents) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Uploaded CSV file is completely empty (0 bytes).",
+        )
+
     if len(contents) > settings.serving.max_upload_bytes:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
             detail=f"Uploaded CSV exceeds maximum allowed payload of {settings.serving.max_upload_bytes // (1024*1024)} MB",
         )
 
-    # 2. Parse CSV
+    # 3. Parse CSV
     try:
         df = pd.read_csv(io.BytesIO(contents))
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Malformed CSV file: {exc}",
+            detail=f"Malformed CSV file syntax: {exc}",
         )
 
-    # 3. Validate columns
+    # 4. Check data rows and enforce batch capacity
+    if len(df) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Uploaded CSV contains headers but zero data rows.",
+        )
+
+    max_rows = getattr(settings.serving, "max_batch_rows", 10000)
+    if len(df) > max_rows:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"CSV row count ({len(df):,}) exceeds maximum allowed batch ceiling of {max_rows:,} rows.",
+        )
+
+    # 5. Validate required columns exist
     missing = [c for c in FEATURE_COLUMNS if c not in df.columns]
     if missing:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"CSV is missing required feature columns: {missing[:5]} (and {len(missing)-5} more)",
+        )
+
+    # 6. Coerce to numeric, check for NaN / Inf / negative Amount
+    for col in FEATURE_COLUMNS:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    if df[FEATURE_COLUMNS].isna().any().any():
+        nan_cols = df[FEATURE_COLUMNS].columns[df[FEATURE_COLUMNS].isna().any()].tolist()
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"CSV contains non-numeric, missing, or NaN values in columns: {nan_cols[:5]}",
+        )
+
+    if np.isinf(df[FEATURE_COLUMNS].values).any():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="CSV contains infinite float values (Inf/-Inf), which are prohibited.",
+        )
+
+    if (df["Amount"] < 0).any():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Transaction Amount contains negative values, which are prohibited.",
         )
 
     thresh = override_threshold if override_threshold is not None else artifacts.threshold
@@ -392,7 +442,9 @@ async def explain_transaction(payload: ExplainRequest) -> ExplainResponse:
     df = features_to_dataframe(payload.transaction)
     probs, decisions, _ = score_dataframe(df, artifacts, threshold=artifacts.threshold)
 
-    explanation = compute_local_explanation(artifacts.explainer, df, top_n=10)
+    explanation = compute_local_explanation(
+        artifacts.explainer, df, top_n=10, pipeline=artifacts.pipeline
+    )
 
     top_attributions = [
         FeatureAttribution(
