@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 import numpy as np
 import pandas as pd
@@ -10,7 +9,6 @@ import pytest
 from sklearn.linear_model import LogisticRegression
 
 from src.artifacts.save import (
-    compute_sha256,
     load_model_artifacts,
     save_model_artifacts,
 )
@@ -24,7 +22,7 @@ def test_sha256_checksum_verification_detects_tampering(tmp_path: Path) -> None:
     dummy_df = pd.DataFrame({"feat_1": [1.0, 2.0, 3.0]})
 
     # Save artifact with SHA-256 integrity hash
-    metadata = save_model_artifacts(
+    _metadata = save_model_artifacts(
         pipeline=clf,
         calibrator=None,
         threshold=0.30,

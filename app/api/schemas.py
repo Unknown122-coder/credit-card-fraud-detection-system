@@ -10,7 +10,7 @@ Provides:
 from __future__ import annotations
 
 import math
-from typing import Any, List, Optional
+from typing import List, Optional
 from pydantic import BaseModel, Field, field_validator
 
 

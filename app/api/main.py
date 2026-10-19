@@ -11,13 +11,11 @@ Endpoints:
 from __future__ import annotations
 
 import io
-import logging
 import time
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from pathlib import Path
-from typing import Any, AsyncGenerator, List, Optional
+from typing import Any, AsyncGenerator, Optional
 from fastapi.exceptions import RequestValidationError
 
 import numpy as np

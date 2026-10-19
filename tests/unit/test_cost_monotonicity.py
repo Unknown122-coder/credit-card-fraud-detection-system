@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from src.evaluation.metrics import compute_expected_cost, find_optimal_threshold
+from src.evaluation.metrics import find_optimal_threshold
 
 
 def test_threshold_shifts_lower_when_fn_cost_increases() -> None:

@@ -17,7 +17,6 @@ import os
 from typing import Any, Optional
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import requests

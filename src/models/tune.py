@@ -626,8 +626,6 @@ def build_best_models(
 if __name__ == "__main__":
     import joblib
 
-    from src.config import PROJECT_ROOT
-
     # ── Setup ─────────────────────────────────────────────────────────
     settings: Settings = get_settings()
     set_global_seed(settings.project.seed)

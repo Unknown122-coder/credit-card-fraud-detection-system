@@ -7,7 +7,6 @@ feature generator for stacked hybrid architectures.
 
 from __future__ import annotations
 
-import logging
 from typing import Any, Optional
 
 import numpy as np

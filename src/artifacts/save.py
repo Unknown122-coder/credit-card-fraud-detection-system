@@ -12,8 +12,8 @@ Saves and loads all production artifacts:
 from __future__ import annotations
 
 import json
-import logging
 import platform
+import hashlib
 import subprocess
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -85,7 +85,7 @@ def create_feature_schema(X_train: pd.DataFrame) -> dict[str, Any]:
     return schema
 
 
-import hashlib
+
 
 
 def compute_sha256(file_path: Path) -> str:

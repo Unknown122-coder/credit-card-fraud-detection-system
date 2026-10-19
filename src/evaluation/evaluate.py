@@ -21,11 +21,8 @@ from typing import Any, Optional
 import joblib
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
 from sklearn.metrics import (
     ConfusionMatrixDisplay,
-    PrecisionRecallDisplay,
-    RocCurveDisplay,
     average_precision_score,
     confusion_matrix,
     precision_recall_curve,

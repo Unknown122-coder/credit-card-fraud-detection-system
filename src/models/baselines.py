@@ -13,7 +13,6 @@ Results are logged to MLflow and saved as CSV and Markdown comparison tables.
 
 from __future__ import annotations
 
-import logging
 import time
 from pathlib import Path
 from typing import Any, Optional

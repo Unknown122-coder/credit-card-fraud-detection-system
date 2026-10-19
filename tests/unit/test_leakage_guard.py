@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 import numpy as np
-import pandas as pd
-import pytest
 from imblearn.over_sampling import SMOTE
 from imblearn.pipeline import Pipeline as ImbPipeline
 from sklearn.preprocessing import RobustScaler
@@ -48,7 +46,7 @@ def test_imblearn_pipeline_resampling_isolation() -> None:
 
     # Validation set with same shape
     X_val = rng.normal(0, 1, (n_val, 10))
-    y_val = (rng.uniform(0, 1, n_val) < 0.10).astype(int)
+    _y_val = (rng.uniform(0, 1, n_val) < 0.10).astype(int)
 
     pipeline = ImbPipeline(
         [

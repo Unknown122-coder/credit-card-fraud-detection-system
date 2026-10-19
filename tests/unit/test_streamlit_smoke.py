@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pandas as pd
-import pytest
 
 from app.ui.streamlit_app import (
     make_attribution_chart,
