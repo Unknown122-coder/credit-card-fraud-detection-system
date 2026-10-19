@@ -183,9 +183,7 @@ def find_optimal_threshold(
     high_sweep = np.linspace(0.05, 0.99, high_steps)
     thresholds: np.ndarray = np.unique(
         np.clip(
-            np.concatenate(
-                (np.array([1e-4]), low_sweep, high_sweep, np.array([0.99]))
-            ),
+            np.concatenate((np.array([1e-4]), low_sweep, high_sweep, np.array([0.99]))),
             1e-4,
             0.99,
         )
