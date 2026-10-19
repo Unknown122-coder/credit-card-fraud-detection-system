@@ -26,10 +26,12 @@ def dummy_artifacts() -> ModelArtifacts:
     X = rng.normal(0, 1, size=(n, len(FEATURE_COLUMNS)))
     y = rng.integers(0, 2, size=n)
 
-    pipe = ImbPipeline([
-        ("scaler", RobustScaler()),
-        ("classifier", LogisticRegression()),
-    ])
+    pipe = ImbPipeline(
+        [
+            ("scaler", RobustScaler()),
+            ("classifier", LogisticRegression()),
+        ]
+    )
     pipe.fit(X, y)
 
     return ModelArtifacts(
@@ -46,9 +48,11 @@ def dummy_artifacts() -> ModelArtifacts:
 def client(dummy_artifacts: ModelArtifacts) -> TestClient:
     """Initialize FastAPI TestClient with dummy artifacts injected into state."""
     app.state.artifacts = dummy_artifacts
-    app.state.settings = type("DummySettings", (), {
-        "serving": type("Serving", (), {"max_upload_bytes": 10485760})()
-    })()
+    app.state.settings = type(
+        "DummySettings",
+        (),
+        {"serving": type("Serving", (), {"max_upload_bytes": 10485760})()},
+    )()
     return TestClient(app)
 
 
@@ -71,7 +75,9 @@ def test_health_endpoint(client: TestClient) -> None:
     assert data["operating_threshold"] == 0.35
 
 
-def test_predict_single_endpoint(client: TestClient, valid_transaction: dict[str, float]) -> None:
+def test_predict_single_endpoint(
+    client: TestClient, valid_transaction: dict[str, float]
+) -> None:
     """Verify /predict returns valid probability and decision."""
     payload = {"transaction": valid_transaction}
     resp = client.post("/predict", json=payload)
@@ -83,7 +89,9 @@ def test_predict_single_endpoint(client: TestClient, valid_transaction: dict[str
     assert data["operating_threshold"] == 0.35
 
 
-def test_predict_threshold_override(client: TestClient, valid_transaction: dict[str, float]) -> None:
+def test_predict_threshold_override(
+    client: TestClient, valid_transaction: dict[str, float]
+) -> None:
     """Verify /predict respects client override_threshold."""
     payload = {"transaction": valid_transaction, "override_threshold": 0.85}
     resp = client.post("/predict", json=payload)
@@ -92,7 +100,9 @@ def test_predict_threshold_override(client: TestClient, valid_transaction: dict[
     assert data["operating_threshold"] == 0.85
 
 
-def test_predict_validation_rejects_negative_amount(client: TestClient, valid_transaction: dict[str, float]) -> None:
+def test_predict_validation_rejects_negative_amount(
+    client: TestClient, valid_transaction: dict[str, float]
+) -> None:
     """Ensure negative amounts trigger 422 Unprocessable Entity."""
     bad_txn = valid_transaction.copy()
     bad_txn["Amount"] = -25.0
@@ -100,7 +110,9 @@ def test_predict_validation_rejects_negative_amount(client: TestClient, valid_tr
     assert resp.status_code == 422
 
 
-def test_predict_validation_rejects_nan_values(client: TestClient, valid_transaction: dict[str, float]) -> None:
+def test_predict_validation_rejects_nan_values(
+    client: TestClient, valid_transaction: dict[str, float]
+) -> None:
     """Ensure NaN float values are explicitly rejected by validator."""
     bad_txn = valid_transaction.copy()
     bad_txn["V4"] = float("nan")
@@ -108,7 +120,9 @@ def test_predict_validation_rejects_nan_values(client: TestClient, valid_transac
     assert resp.status_code == 422
 
 
-def test_predict_batch_endpoint(client: TestClient, valid_transaction: dict[str, float]) -> None:
+def test_predict_batch_endpoint(
+    client: TestClient, valid_transaction: dict[str, float]
+) -> None:
     """Verify /predict_batch handles multiple transaction records."""
     payload = {
         "transactions": [valid_transaction, valid_transaction],
@@ -121,7 +135,9 @@ def test_predict_batch_endpoint(client: TestClient, valid_transaction: dict[str,
     assert len(data["results"]) == 2
 
 
-def test_predict_batch_csv_endpoint(client: TestClient, valid_transaction: dict[str, float]) -> None:
+def test_predict_batch_csv_endpoint(
+    client: TestClient, valid_transaction: dict[str, float]
+) -> None:
     """Verify /predict_batch_csv parses multipart CSV files correctly."""
     df = pd.DataFrame([valid_transaction, valid_transaction])
     csv_bytes = df.to_csv(index=False).encode("utf-8")

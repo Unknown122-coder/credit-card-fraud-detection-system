@@ -11,7 +11,11 @@ import pandas as pd
 
 from src.config import Settings, get_settings
 from src.data.split import load_splits
-from src.explain.shap_utils import create_explainer, generate_global_plots, save_explainer
+from src.explain.shap_utils import (
+    create_explainer,
+    generate_global_plots,
+    save_explainer,
+)
 from src.utils.logger import get_logger
 from src.utils.seed import set_global_seed
 

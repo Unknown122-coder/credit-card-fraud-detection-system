@@ -9,7 +9,6 @@ Features:
 - Seamless HTTP integration with the FastAPI serving backend
 """
 
-
 from __future__ import annotations
 
 import io
@@ -30,9 +29,34 @@ API_BASE_URL: str = os.getenv("API_URL", "http://127.0.0.1:8000")
 # All 28 PCA features + Time + Amount
 FEATURE_COLS: list[str] = [
     "Time",
-    "V1", "V2", "V3", "V4", "V5", "V6", "V7", "V8", "V9", "V10",
-    "V11", "V12", "V13", "V14", "V15", "V16", "V17", "V18", "V19", "V20",
-    "V21", "V22", "V23", "V24", "V25", "V26", "V27", "V28",
+    "V1",
+    "V2",
+    "V3",
+    "V4",
+    "V5",
+    "V6",
+    "V7",
+    "V8",
+    "V9",
+    "V10",
+    "V11",
+    "V12",
+    "V13",
+    "V14",
+    "V15",
+    "V16",
+    "V17",
+    "V18",
+    "V19",
+    "V20",
+    "V21",
+    "V22",
+    "V23",
+    "V24",
+    "V25",
+    "V26",
+    "V27",
+    "V28",
     "Amount",
 ]
 
@@ -40,23 +64,67 @@ FEATURE_COLS: list[str] = [
 PRESET_LEGITIMATE: dict[str, float] = {
     "Time": 142850.0,
     "Amount": 48.20,
-    "V1": -0.85, "V2": 0.22, "V3": 1.45, "V4": -0.32, "V5": 0.12,
-    "V6": -0.25, "V7": 0.38, "V8": 0.08, "V9": 0.15, "V10": -0.10,
-    "V11": -0.45, "V12": 0.20, "V13": -0.15, "V14": 0.05, "V15": 0.85,
-    "V16": -0.12, "V17": 0.08, "V18": 0.10, "V19": -0.05, "V20": 0.02,
-    "V21": -0.02, "V22": 0.12, "V23": -0.05, "V24": 0.10, "V25": 0.05,
-    "V26": -0.08, "V27": 0.02, "V28": 0.01,
+    "V1": -0.85,
+    "V2": 0.22,
+    "V3": 1.45,
+    "V4": -0.32,
+    "V5": 0.12,
+    "V6": -0.25,
+    "V7": 0.38,
+    "V8": 0.08,
+    "V9": 0.15,
+    "V10": -0.10,
+    "V11": -0.45,
+    "V12": 0.20,
+    "V13": -0.15,
+    "V14": 0.05,
+    "V15": 0.85,
+    "V16": -0.12,
+    "V17": 0.08,
+    "V18": 0.10,
+    "V19": -0.05,
+    "V20": 0.02,
+    "V21": -0.02,
+    "V22": 0.12,
+    "V23": -0.05,
+    "V24": 0.10,
+    "V25": 0.05,
+    "V26": -0.08,
+    "V27": 0.02,
+    "V28": 0.01,
 }
 
 PRESET_FRAUD: dict[str, float] = {
     "Time": 45632.0,
     "Amount": 482.00,
-    "V1": -2.31, "V2": 1.95, "V3": -1.61, "V4": 3.99, "V5": -0.52,
-    "V6": -1.42, "V7": -2.53, "V8": 1.39, "V9": -2.77, "V10": -2.77,
-    "V11": 3.20, "V12": -2.89, "V13": -0.59, "V14": -4.28, "V15": 0.38,
-    "V16": -1.14, "V17": -2.83, "V18": -0.01, "V19": 0.41, "V20": 0.12,
-    "V21": 0.51, "V22": -0.03, "V23": -0.46, "V24": 0.32, "V25": 0.04,
-    "V26": 0.17, "V27": 0.26, "V28": -0.14,
+    "V1": -2.31,
+    "V2": 1.95,
+    "V3": -1.61,
+    "V4": 3.99,
+    "V5": -0.52,
+    "V6": -1.42,
+    "V7": -2.53,
+    "V8": 1.39,
+    "V9": -2.77,
+    "V10": -2.77,
+    "V11": 3.20,
+    "V12": -2.89,
+    "V13": -0.59,
+    "V14": -4.28,
+    "V15": 0.38,
+    "V16": -1.14,
+    "V17": -2.83,
+    "V18": -0.01,
+    "V19": 0.41,
+    "V20": 0.12,
+    "V21": 0.51,
+    "V22": -0.03,
+    "V23": -0.46,
+    "V24": 0.32,
+    "V25": 0.04,
+    "V26": 0.17,
+    "V27": 0.26,
+    "V28": -0.14,
 }
 
 
@@ -94,8 +162,10 @@ def sanitize_csv_injection(df_to_clean: pd.DataFrame) -> pd.DataFrame:
     cleaned = df_to_clean.copy()
     triggers = ("=", "+", "-", "@", "\t", "\r")
     for col in cleaned.select_dtypes(include=["object"]).columns:
-        cleaned[col] = cleaned[col].astype(str).apply(
-            lambda val: f"'{val}" if val.startswith(triggers) else val
+        cleaned[col] = (
+            cleaned[col]
+            .astype(str)
+            .apply(lambda val: f"'{val}" if val.startswith(triggers) else val)
         )
     return cleaned
 
@@ -124,12 +194,19 @@ def call_explain(payload: dict[str, Any]) -> Optional[dict[str, Any]]:
     return None
 
 
-def call_predict_batch_csv(file_bytes: bytes, threshold: float) -> Optional[dict[str, Any]]:
+def call_predict_batch_csv(
+    file_bytes: bytes, threshold: float
+) -> Optional[dict[str, Any]]:
     """Upload CSV to /predict_batch_csv."""
     try:
         files = {"file": ("upload.csv", file_bytes, "text/csv")}
         params = {"override_threshold": threshold}
-        resp = requests.post(f"{API_BASE_URL}/predict_batch_csv", files=files, params=params, timeout=60.0)
+        resp = requests.post(
+            f"{API_BASE_URL}/predict_batch_csv",
+            files=files,
+            params=params,
+            timeout=60.0,
+        )
         if resp.status_code == 200:
             return resp.json()
         st.error(f"Batch scoring failed: {resp.text}")
@@ -151,17 +228,32 @@ def make_gauge_chart(probability: float, threshold: float) -> go.Figure:
             value=probability * 100,
             domain={"x": [0, 1], "y": [0, 1]},
             title={"text": "Fraud Risk Probability (%)", "font": {"size": 18}},
-            number={"suffix": "%", "font": {"size": 32, "color": "#d9534f" if probability >= threshold else "#2b5c8f"}},
+            number={
+                "suffix": "%",
+                "font": {
+                    "size": 32,
+                    "color": "#d9534f" if probability >= threshold else "#2b5c8f",
+                },
+            },
             gauge={
                 "axis": {"range": [0, 100], "tickwidth": 1, "tickcolor": "darkgray"},
-                "bar": {"color": "#d9534f" if probability >= threshold else "#2b5c8f", "thickness": 0.28},
+                "bar": {
+                    "color": "#d9534f" if probability >= threshold else "#2b5c8f",
+                    "thickness": 0.28,
+                },
                 "bgcolor": "white",
                 "borderwidth": 1,
                 "bordercolor": "gray",
                 "steps": [
                     {"range": [0, threshold * 100], "color": "#eef6ec"},
-                    {"range": [threshold * 100, min(100.0, (threshold + 0.3) * 100)], "color": "#fff3cd"},
-                    {"range": [min(100.0, (threshold + 0.3) * 100), 100], "color": "#f8d7da"},
+                    {
+                        "range": [threshold * 100, min(100.0, (threshold + 0.3) * 100)],
+                        "color": "#fff3cd",
+                    },
+                    {
+                        "range": [min(100.0, (threshold + 0.3) * 100), 100],
+                        "color": "#f8d7da",
+                    },
                 ],
                 "threshold": {
                     "line": {"color": "black", "width": 4},
@@ -184,7 +276,10 @@ def make_attribution_chart(attributions: list[dict[str, Any]]) -> go.Figure:
     fig = go.Figure(
         go.Bar(
             x=df_att["shap_value"],
-            y=df_att["feature_name"] + " (" + df_att["feature_group"].str.slice(0, 18) + "…)",
+            y=df_att["feature_name"]
+            + " ("
+            + df_att["feature_group"].str.slice(0, 18)
+            + "…)",
             orientation="h",
             marker=dict(color=colors),
             text=[f"{v:+.2f}" for v in df_att["shap_value"]],
@@ -250,7 +345,12 @@ if curve_df is not None and not curve_df.empty and "threshold" in curve_df.colum
     emp_rec = float(nearest_row.get("recall", 0.0))
     emp_f2 = float(nearest_row.get("f2", 0.0))
     emp_cost = float(nearest_row.get("expected_cost", 0.0))
-    n_txns = int(nearest_row.get("tp", 0) + nearest_row.get("fp", 0) + nearest_row.get("fn", 0) + nearest_row.get("tn", 0))
+    n_txns = int(
+        nearest_row.get("tp", 0)
+        + nearest_row.get("fp", 0)
+        + nearest_row.get("fn", 0)
+        + nearest_row.get("tn", 0)
+    )
     cost_per_txn = emp_cost / max(1, n_txns) if n_txns > 0 else emp_cost
 
     col_s1, col_s2 = st.sidebar.columns(2)
@@ -260,7 +360,9 @@ if curve_df is not None and not curve_df.empty and "threshold" in curve_df.colum
     col_s3.metric("F2-Score", f"{emp_f2:.3f}")
     col_s4.metric("Exp. Cost/Txn", f"${cost_per_txn:.2f}")
 else:
-    st.sidebar.info("Run `make evaluate` to generate empirical validation response curve at τ.")
+    st.sidebar.info(
+        "Run `make evaluate` to generate empirical validation response curve at τ."
+    )
 
 st.sidebar.info(
     "**Cost Matrix Specification:**\n"
@@ -270,11 +372,13 @@ st.sidebar.info(
 )
 
 # Tabs
-tab1, tab2, tab3 = st.tabs([
-    "🔍 Single Transaction Analysis",
-    "📁 Batch CSV Processing",
-    "📈 System Performance & Artifacts",
-])
+tab1, tab2, tab3 = st.tabs(
+    [
+        "🔍 Single Transaction Analysis",
+        "📁 Batch CSV Processing",
+        "📈 System Performance & Artifacts",
+    ]
+)
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Tab 1: Single Transaction Analysis
@@ -284,8 +388,13 @@ with tab1:
 
     # Quick Presets
     p_col1, p_col2, _ = st.columns([1, 1, 3])
-    load_legit = p_col1.button("📋 Load Legitimate Preset", help="Load typical normal transaction parameters")
-    load_fraud = p_col2.button("🚨 Load Fraud Preset", help="Load characteristic high-risk transaction parameters")
+    load_legit = p_col1.button(
+        "📋 Load Legitimate Preset", help="Load typical normal transaction parameters"
+    )
+    load_fraud = p_col2.button(
+        "🚨 Load Fraud Preset",
+        help="Load characteristic high-risk transaction parameters",
+    )
 
     if "form_values" not in st.session_state:
         st.session_state.form_values = PRESET_LEGITIMATE.copy()
@@ -333,7 +442,9 @@ with tab1:
                         key=f"input_{v_key}",
                     )
 
-            submitted = st.form_submit_button("⚡ Score Transaction Risk", use_container_width=True)
+            submitted = st.form_submit_button(
+                "⚡ Score Transaction Risk", use_container_width=True
+            )
 
     with col_result:
         st.markdown("#### Decision & Risk Attribution")
@@ -355,7 +466,9 @@ with tab1:
                 exp_cost = pred_res["expected_cost"]
 
                 # Render Gauge
-                st.plotly_chart(make_gauge_chart(prob, threshold), use_container_width=True)
+                st.plotly_chart(
+                    make_gauge_chart(prob, threshold), use_container_width=True
+                )
 
                 # Decision Banner
                 if decision == 1:
@@ -383,7 +496,9 @@ with tab1:
                     st.markdown("##### 📝 Compliance Audit Summary")
                     st.info(exp_res["summary_text"])
         else:
-            st.info("👈 Enter transaction parameters and click **Score Transaction Risk** to evaluate.")
+            st.info(
+                "👈 Enter transaction parameters and click **Score Transaction Risk** to evaluate."
+            )
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -391,13 +506,17 @@ with tab1:
 # ═══════════════════════════════════════════════════════════════════════════
 with tab2:
     st.subheader("High-Throughput Batch Scoring Engine")
-    st.markdown("Upload a CSV file containing transactions (`Time`, `V1`–`V28`, `Amount`). Max size: 10 MB.")
+    st.markdown(
+        "Upload a CSV file containing transactions (`Time`, `V1`–`V28`, `Amount`). Max size: 10 MB."
+    )
 
     uploaded_file = st.file_uploader("Select CSV File", type=["csv"])
 
     if uploaded_file is not None:
         file_bytes = uploaded_file.getvalue()
-        st.write(f"📁 **File Name:** `{uploaded_file.name}` ({len(file_bytes) / 1024:.1f} KB)")
+        st.write(
+            f"📁 **File Name:** `{uploaded_file.name}` ({len(file_bytes) / 1024:.1f} KB)"
+        )
 
         # Preview uploaded data
         try:
@@ -407,7 +526,9 @@ with tab2:
             st.error(f"Failed to parse CSV preview: {exc}")
 
         if st.button("🚀 Process Batch Predictions", type="primary"):
-            with st.spinner("Scoring batch transactions through production pipeline..."):
+            with st.spinner(
+                "Scoring batch transactions through production pipeline..."
+            ):
                 batch_res = call_predict_batch_csv(file_bytes, threshold=threshold)
 
             if batch_res:
@@ -415,7 +536,9 @@ with tab2:
                 flagged = batch_res["flagged_count"]
                 ratio = batch_res["flagged_ratio"]
 
-                st.success(f"Batch processing complete! Evaluated **{total:,}** transactions.")
+                st.success(
+                    f"Batch processing complete! Evaluated **{total:,}** transactions."
+                )
 
                 m1, m2, m3 = st.columns(3)
                 m1.metric("Total Transactions", f"{total:,}")
@@ -425,13 +548,19 @@ with tab2:
                 # Format results table
                 records = []
                 for idx, r in enumerate(batch_res["results"]):
-                    records.append({
-                        "Transaction #": idx + 1,
-                        "Fraud Probability": f"{r['fraud_probability']:.4f}",
-                        "Decision": "DECLINE (Fraud)" if r["decision"] == 1 else "APPROVE (Legit)",
-                        "Operating Threshold": r["operating_threshold"],
-                        "Expected Loss ($)": f"${r['expected_cost']:.2f}",
-                    })
+                    records.append(
+                        {
+                            "Transaction #": idx + 1,
+                            "Fraud Probability": f"{r['fraud_probability']:.4f}",
+                            "Decision": (
+                                "DECLINE (Fraud)"
+                                if r["decision"] == 1
+                                else "APPROVE (Legit)"
+                            ),
+                            "Operating Threshold": r["operating_threshold"],
+                            "Expected Loss ($)": f"${r['expected_cost']:.2f}",
+                        }
+                    )
 
                 res_df = pd.DataFrame(records)
                 st.dataframe(res_df.head(100), use_container_width=True)
@@ -459,7 +588,9 @@ with tab3:
             meta = json.load(f)
         st.json(meta)
     else:
-        st.info("Model metadata artifact not yet generated. Train a champion model to inspect lineage.")
+        st.info(
+            "Model metadata artifact not yet generated. Train a champion model to inspect lineage."
+        )
 
     st.markdown("#### Global Explainability Visualizations")
     beeswarm_img = "docs/figures/shap_summary_beeswarm.png"
@@ -467,7 +598,9 @@ with tab3:
 
     g_col1, g_col2 = st.columns(2)
     if os.path.exists(beeswarm_img):
-        g_col1.image(beeswarm_img, caption="Global Feature Impact Distribution (Beeswarm)")
+        g_col1.image(
+            beeswarm_img, caption="Global Feature Impact Distribution (Beeswarm)"
+        )
     else:
         g_col1.caption("Generate SHAP global plots with: `make explain`")
 

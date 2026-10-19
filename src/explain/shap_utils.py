@@ -15,6 +15,7 @@ from typing import Any, Optional
 
 import joblib
 import matplotlib
+
 matplotlib.use("Agg")  # Non-interactive backend for server/CLI
 import matplotlib.pyplot as plt
 import numpy as np
@@ -73,7 +74,9 @@ def get_feature_group(feature_name: str) -> str:
     return FEATURE_GROUP_MAP.get(feature_name, "General Transaction Attribute")
 
 
-def transform_features_through_pipeline(model: Any, X: pd.DataFrame | np.ndarray) -> np.ndarray:
+def transform_features_through_pipeline(
+    model: Any, X: pd.DataFrame | np.ndarray
+) -> np.ndarray:
     """Transform features through all pipeline steps prior to the final classifier.
 
     Ensures that TreeExplainer evaluates features in the exact numerical space
@@ -132,12 +135,18 @@ def create_explainer(
 
     try:
         explainer = shap.TreeExplainer(estimator, data=transformed_bg)
-        logger.info("Created TreeExplainer successfully on transformed background space")
+        logger.info(
+            "Created TreeExplainer successfully on transformed background space"
+        )
         return explainer
     except Exception as exc:
         logger.warning("TreeExplainer failed (%s). Falling back to shap.Explainer", exc)
         return shap.Explainer(
-            estimator.predict_proba if hasattr(estimator, "predict_proba") else estimator,
+            (
+                estimator.predict_proba
+                if hasattr(estimator, "predict_proba")
+                else estimator
+            ),
             transformed_bg,
         )
 
@@ -160,7 +169,9 @@ def compute_shap_values(
     np.ndarray
         Array of shape (n_samples, n_features).
     """
-    shap_vals = explainer(X) if hasattr(explainer, "__call__") else explainer.shap_values(X)
+    shap_vals = (
+        explainer(X) if hasattr(explainer, "__call__") else explainer.shap_values(X)
+    )
 
     if hasattr(shap_vals, "values"):
         vals = shap_vals.values
@@ -285,12 +296,14 @@ def compute_local_explanation(
 
     attributions: list[dict[str, Any]] = []
     for name, val, shap_val in zip(feature_names, feature_values, shap_vals):
-        attributions.append({
-            "feature_name": str(name),
-            "feature_value": float(val),
-            "shap_value": float(shap_val),
-            "feature_group": get_feature_group(str(name)),
-        })
+        attributions.append(
+            {
+                "feature_name": str(name),
+                "feature_value": float(val),
+                "shap_value": float(shap_val),
+                "feature_group": get_feature_group(str(name)),
+            }
+        )
 
     # Sort descending by absolute SHAP impact
     attributions.sort(key=lambda x: abs(x["shap_value"]), reverse=True)

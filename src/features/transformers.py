@@ -195,9 +195,7 @@ class HourOfDayTransformer(BaseEstimator, TransformerMixin):
         ) / self.SECONDS_PER_HOUR
         if self.drop_original:
             X_out = X_out.drop(columns=[self.time_col])
-            logger.debug(
-                "Created 'HourOfDay' and dropped '%s'.", self.time_col
-            )
+            logger.debug("Created 'HourOfDay' and dropped '%s'.", self.time_col)
         else:
             logger.debug("Created 'HourOfDay' (kept '%s').", self.time_col)
         return X_out

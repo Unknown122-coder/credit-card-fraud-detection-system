@@ -23,10 +23,12 @@ def mock_client() -> TestClient:
     X = rng.normal(0, 1, size=(n, len(FEATURE_COLUMNS)))
     y = rng.integers(0, 2, size=n)
 
-    pipe = ImbPipeline([
-        ("scaler", RobustScaler()),
-        ("classifier", LogisticRegression()),
-    ])
+    pipe = ImbPipeline(
+        [
+            ("scaler", RobustScaler()),
+            ("classifier", LogisticRegression()),
+        ]
+    )
     pipe.fit(X, y)
 
     artifacts = ModelArtifacts(
@@ -39,12 +41,20 @@ def mock_client() -> TestClient:
     )
 
     app.state.artifacts = artifacts
-    app.state.settings = type("MockSettings", (), {
-        "serving": type("Serving", (), {
-            "max_upload_bytes": 10485760,
-            "max_batch_rows": 10000,
-        })()
-    })()
+    app.state.settings = type(
+        "MockSettings",
+        (),
+        {
+            "serving": type(
+                "Serving",
+                (),
+                {
+                    "max_upload_bytes": 10485760,
+                    "max_batch_rows": 10000,
+                },
+            )()
+        },
+    )()
 
     return TestClient(app)
 
@@ -110,6 +120,8 @@ def test_boundary_thresholds(mock_client: TestClient) -> None:
     """Verify system accepts boundary thresholds 0.01 and 0.99."""
     txn = {c: 0.05 for c in FEATURE_COLUMNS}
     for t in (0.01, 0.99):
-        resp = mock_client.post("/predict", json={"transaction": txn, "override_threshold": t})
+        resp = mock_client.post(
+            "/predict", json={"transaction": txn, "override_threshold": t}
+        )
         assert resp.status_code == 200
         assert resp.json()["operating_threshold"] == t

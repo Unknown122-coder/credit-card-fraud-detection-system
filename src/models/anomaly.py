@@ -45,7 +45,9 @@ class IsolationForestScoreTransformer(BaseEstimator, TransformerMixin):
         self.min_score_: float = 0.0
         self.max_score_: float = 1.0
 
-    def fit(self, X: pd.DataFrame | np.ndarray, y: Optional[Any] = None) -> IsolationForestScoreTransformer:
+    def fit(
+        self, X: pd.DataFrame | np.ndarray, y: Optional[Any] = None
+    ) -> IsolationForestScoreTransformer:
         """Fit IsolationForest on training data."""
         X_arr = X.values if isinstance(X, pd.DataFrame) else np.asarray(X)
         self.model_ = IsolationForest(
@@ -68,7 +70,9 @@ class IsolationForestScoreTransformer(BaseEstimator, TransformerMixin):
         X_arr = X.values if isinstance(X, pd.DataFrame) else np.asarray(X)
         raw_scores = -self.model_.decision_function(X_arr)
         denom = max(self.max_score_ - self.min_score_, 1e-8)
-        norm_scores = np.clip((raw_scores - self.min_score_) / denom, 0.0, 1.0).reshape(-1, 1)
+        norm_scores = np.clip((raw_scores - self.min_score_) / denom, 0.0, 1.0).reshape(
+            -1, 1
+        )
         return np.hstack([X_arr, norm_scores])
 
 

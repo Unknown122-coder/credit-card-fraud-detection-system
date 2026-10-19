@@ -174,12 +174,16 @@ def find_optimal_threshold(
     """
     # Sweep thresholds covering extreme low base rates (1e-4 to 0.99)
     # using log-spaced low thresholds and linear high thresholds
-    min_prob = max(1e-4, float(np.min(y_prob[y_prob > 0])) if np.any(y_prob > 0) else 1e-4)
+    min_prob = max(
+        1e-4, float(np.min(y_prob[y_prob > 0])) if np.any(y_prob > 0) else 1e-4
+    )
     low_steps = max(20, n_steps // 4)
     high_steps = max(20, n_steps - low_steps)
     low_sweep = np.geomspace(min_prob, 0.05, low_steps)
     high_sweep = np.linspace(0.05, 0.99, high_steps)
-    thresholds = np.unique(np.clip(np.concatenate(([1e-4], low_sweep, high_sweep, [0.99])), 1e-4, 0.99))
+    thresholds = np.unique(
+        np.clip(np.concatenate(([1e-4], low_sweep, high_sweep, [0.99])), 1e-4, 0.99)
+    )
     best_threshold: float = 0.5
     best_cost: float = float("inf")
 
@@ -313,7 +317,9 @@ def bootstrap_confidence_intervals(
             "  %s: mean=%.4f, CI=[%.4f, %.4f]", name, mean_val, lower_ci, upper_ci
         )
 
-    logger.info("Bootstrap confidence intervals computed for %d metrics", len(ci_results))
+    logger.info(
+        "Bootstrap confidence intervals computed for %d metrics", len(ci_results)
+    )
     return ci_results
 
 

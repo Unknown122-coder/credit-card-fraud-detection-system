@@ -305,12 +305,11 @@ def _assert_no_overlap(
     AssertionError
         If any two splits share rows.
     """
+
     # Use object_id-based approach: compare by hashing all column values.
     def _row_hashes(df: pd.DataFrame) -> set[int]:
         """Return a set of hashes for each row in *df*."""
-        return set(
-            pd.util.hash_pandas_object(df, index=False).values.tolist()
-        )
+        return set(pd.util.hash_pandas_object(df, index=False).values.tolist())
 
     h_train = _row_hashes(train)
     h_val = _row_hashes(val)
@@ -320,15 +319,9 @@ def _assert_no_overlap(
     overlap_tt = h_train & h_test
     overlap_vt = h_val & h_test
 
-    assert not overlap_tv, (
-        f"Train and val share {len(overlap_tv)} row hash(es)."
-    )
-    assert not overlap_tt, (
-        f"Train and test share {len(overlap_tt)} row hash(es)."
-    )
-    assert not overlap_vt, (
-        f"Val and test share {len(overlap_vt)} row hash(es)."
-    )
+    assert not overlap_tv, f"Train and val share {len(overlap_tv)} row hash(es)."
+    assert not overlap_tt, f"Train and test share {len(overlap_tt)} row hash(es)."
+    assert not overlap_vt, f"Val and test share {len(overlap_vt)} row hash(es)."
     logger.debug("No-overlap assertion passed for all splits.")
 
 
@@ -370,9 +363,7 @@ def main() -> None:
     config = get_settings()
 
     if not config.raw_data_path.exists():
-        raise FileNotFoundError(
-            f"Dataset not found: {config.raw_data_path}"
-        )
+        raise FileNotFoundError(f"Dataset not found: {config.raw_data_path}")
 
     logger.info("Loading dataset from %s", config.raw_data_path)
     df = pd.read_csv(config.raw_data_path)

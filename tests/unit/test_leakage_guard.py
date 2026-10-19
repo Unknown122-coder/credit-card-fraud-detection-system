@@ -50,18 +50,22 @@ def test_imblearn_pipeline_resampling_isolation() -> None:
     X_val = rng.normal(0, 1, (n_val, 10))
     y_val = (rng.uniform(0, 1, n_val) < 0.10).astype(int)
 
-    pipeline = ImbPipeline([
-        ("scaler", RobustScaler()),
-        ("smote", SMOTE(random_state=42, k_neighbors=2)),
-        ("classifier", LogisticRegression()),
-    ])
+    pipeline = ImbPipeline(
+        [
+            ("scaler", RobustScaler()),
+            ("smote", SMOTE(random_state=42, k_neighbors=2)),
+            ("classifier", LogisticRegression()),
+        ]
+    )
 
     # Fit pipeline
     pipeline.fit(X_tr, y_tr)
 
     # When predicting on validation, length must equal n_val exactly (no synthetic rows generated)
     val_probs = pipeline.predict_proba(X_val)
-    assert val_probs.shape[0] == n_val, "Validation output size must exactly match input validation size"
+    assert (
+        val_probs.shape[0] == n_val
+    ), "Validation output size must exactly match input validation size"
 
 
 def test_scaler_parameters_derived_exclusively_from_train_fold() -> None:

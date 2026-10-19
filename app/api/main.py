@@ -48,9 +48,34 @@ logger = get_logger(__name__)
 # Feature column ordering expected by model
 FEATURE_COLUMNS: list[str] = [
     "Time",
-    "V1", "V2", "V3", "V4", "V5", "V6", "V7", "V8", "V9", "V10",
-    "V11", "V12", "V13", "V14", "V15", "V16", "V17", "V18", "V19", "V20",
-    "V21", "V22", "V23", "V24", "V25", "V26", "V27", "V28",
+    "V1",
+    "V2",
+    "V3",
+    "V4",
+    "V5",
+    "V6",
+    "V7",
+    "V8",
+    "V9",
+    "V10",
+    "V11",
+    "V12",
+    "V13",
+    "V14",
+    "V15",
+    "V16",
+    "V17",
+    "V18",
+    "V19",
+    "V20",
+    "V21",
+    "V22",
+    "V23",
+    "V24",
+    "V25",
+    "V26",
+    "V27",
+    "V28",
     "Amount",
 ]
 
@@ -135,6 +160,7 @@ async def audit_logging_middleware(request: Request, call_next: Any) -> Any:
     response.headers["X-Response-Time-Ms"] = f"{duration_ms:.2f}"
     return response
 
+
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(
     request: Request,
@@ -204,7 +230,10 @@ def score_dataframe(
         try:
             probs = artifacts.calibrator.predict_proba(ordered_df)[:, 1]
         except Exception as exc:
-            logger.warning("Calibrator predict_proba failed (%s); falling back to base pipeline", exc)
+            logger.warning(
+                "Calibrator predict_proba failed (%s); falling back to base pipeline",
+                exc,
+            )
             probs = artifacts.pipeline.predict_proba(ordered_df)[:, 1]
     elif hasattr(artifacts.pipeline, "predict_proba"):
         probs = artifacts.pipeline.predict_proba(ordered_df)[:, 1]
@@ -271,7 +300,11 @@ async def predict_single(payload: PredictRequest) -> PredictResponse:
             detail="Model artifacts are not loaded on this server.",
         )
 
-    thresh = payload.override_threshold if payload.override_threshold is not None else artifacts.threshold
+    thresh = (
+        payload.override_threshold
+        if payload.override_threshold is not None
+        else artifacts.threshold
+    )
 
     df = features_to_dataframe(payload.transaction)
     probs, decisions, costs = score_dataframe(df, artifacts, threshold=thresh)
@@ -295,7 +328,11 @@ async def predict_batch(payload: BatchPredictRequest) -> BatchPredictResponse:
             detail="Model artifacts are not loaded on this server.",
         )
 
-    thresh = payload.override_threshold if payload.override_threshold is not None else artifacts.threshold
+    thresh = (
+        payload.override_threshold
+        if payload.override_threshold is not None
+        else artifacts.threshold
+    )
 
     data_dicts = [t.model_dump() for t in payload.transactions]
     df = pd.DataFrame(data_dicts)[FEATURE_COLUMNS]
@@ -345,8 +382,16 @@ async def predict_batch_csv(
 
     # 1. Validate file extension and MIME type
     filename = file.filename or ""
-    valid_content_types = {"text/csv", "application/vnd.ms-excel", "text/plain", "application/csv"}
-    if not filename.lower().endswith(".csv") and file.content_type not in valid_content_types:
+    valid_content_types = {
+        "text/csv",
+        "application/vnd.ms-excel",
+        "text/plain",
+        "application/csv",
+    }
+    if (
+        not filename.lower().endswith(".csv")
+        and file.content_type not in valid_content_types
+    ):
         raise HTTPException(
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
             detail="Unsupported file type. Please upload a valid CSV file (.csv).",
@@ -402,7 +447,9 @@ async def predict_batch_csv(
         df[col] = pd.to_numeric(df[col], errors="coerce")
 
     if df[FEATURE_COLUMNS].isna().any().any():
-        nan_cols = df[FEATURE_COLUMNS].columns[df[FEATURE_COLUMNS].isna().any()].tolist()
+        nan_cols = (
+            df[FEATURE_COLUMNS].columns[df[FEATURE_COLUMNS].isna().any()].tolist()
+        )
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"CSV contains non-numeric, missing, or NaN values in columns: {nan_cols[:5]}",
@@ -420,9 +467,13 @@ async def predict_batch_csv(
             detail="Transaction Amount contains negative values, which are prohibited.",
         )
 
-    thresh = override_threshold if override_threshold is not None else artifacts.threshold
+    thresh = (
+        override_threshold if override_threshold is not None else artifacts.threshold
+    )
 
-    probs, decisions, costs = score_dataframe(df[FEATURE_COLUMNS], artifacts, threshold=thresh)
+    probs, decisions, costs = score_dataframe(
+        df[FEATURE_COLUMNS], artifacts, threshold=thresh
+    )
     version = artifacts.metadata.get("version", "1.0.0")
 
     results: list[PredictResponse] = []

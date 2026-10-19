@@ -16,7 +16,9 @@ from src.evaluation.metrics import (
 def test_compute_expected_cost_asymmetric_calculation() -> None:
     """Verify asymmetric cost: FN = Amount + 25, FP = 10."""
     y_true = np.array([1, 0, 1, 0])
-    y_pred = np.array([0, 1, 1, 0])  # Index 0: FN; Index 1: FP; Index 2: TP; Index 3: TN
+    y_pred = np.array(
+        [0, 1, 1, 0]
+    )  # Index 0: FN; Index 1: FP; Index 2: TP; Index 3: TN
     amounts = np.array([100.0, 50.0, 200.0, 30.0])
 
     # Expected:
@@ -57,7 +59,9 @@ def test_find_optimal_threshold_minimizes_cost() -> None:
     default_pred = (y_prob >= 0.5).astype(int)
     default_cost = compute_expected_cost(y_true, default_pred, amounts, 10.0, 25.0)
 
-    assert min_cost <= default_cost, "Optimized threshold should achieve equal or lower cost than 0.50"
+    assert (
+        min_cost <= default_cost
+    ), "Optimized threshold should achieve equal or lower cost than 0.50"
     assert 0.01 <= opt_thresh <= 0.99
 
 
@@ -68,7 +72,16 @@ def test_compute_all_metrics_keys_and_ranges() -> None:
 
     metrics = compute_all_metrics(y_true=y_true, y_prob=y_prob, threshold=0.5)
 
-    required_keys = {"pr_auc", "roc_auc", "precision", "recall", "f1", "f2", "expected_cost", "brier_score"}
+    required_keys = {
+        "pr_auc",
+        "roc_auc",
+        "precision",
+        "recall",
+        "f1",
+        "f2",
+        "expected_cost",
+        "brier_score",
+    }
     assert required_keys.issubset(metrics.keys())
 
     assert 0.0 <= metrics["pr_auc"] <= 1.0

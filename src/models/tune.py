@@ -310,9 +310,7 @@ def run_tuning(
     )
 
     # Map model name → (objective factory, per-model trial count)
-    model_registry: dict[
-        str, tuple[_ObjectiveCallable, int]
-    ] = {
+    model_registry: dict[str, tuple[_ObjectiveCallable, int]] = {
         "xgboost": (
             create_xgboost_objective(X_train, y_train, cv, seed),
             tuning_cfg.xgboost_trials,
@@ -340,9 +338,7 @@ def run_tuning(
         )
 
         for model_name, (objective_fn, n_trials) in model_registry.items():
-            logger.info(
-                "Starting tuning for %s — %d trials", model_name, n_trials
-            )
+            logger.info("Starting tuning for %s — %d trials", model_name, n_trials)
 
             study = optuna.create_study(
                 study_name=f"{model_name}_tuning",
@@ -390,9 +386,7 @@ def run_tuning(
         # Log a summary metric for the overall best
         overall_best_name = max(studies, key=lambda k: studies[k].best_value)
         mlflow.log_param("overall_best_model", overall_best_name)
-        mlflow.log_metric(
-            "overall_best_pr_auc", studies[overall_best_name].best_value
-        )
+        mlflow.log_metric("overall_best_pr_auc", studies[overall_best_name].best_value)
         logger.info(
             "Overall best model: %s with PR-AUC=%.5f",
             overall_best_name,
@@ -445,9 +439,7 @@ def save_optuna_visualizations(
             fig_importance.write_html(str(importance_path))
             logger.info("  ↳ param importances   → %s", importance_path)
         except (ValueError, RuntimeError) as exc:
-            logger.warning(
-                "Skipping param importances for %s: %s", model_name, exc
-            )
+            logger.warning("Skipping param importances for %s: %s", model_name, exc)
 
         # 3. Contour plot (top-2 params) ------------------------------------
         try:
@@ -459,13 +451,9 @@ def save_optuna_visualizations(
                 fig_contour.write_html(str(contour_path))
                 logger.info("  ↳ contour plot        → %s", contour_path)
             else:
-                logger.warning(
-                    "Not enough params for contour plot for %s", model_name
-                )
+                logger.warning("Not enough params for contour plot for %s", model_name)
         except (ValueError, RuntimeError) as exc:
-            logger.warning(
-                "Skipping contour plot for %s: %s", model_name, exc
-            )
+            logger.warning("Skipping contour plot for %s: %s", model_name, exc)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -601,9 +589,7 @@ def build_best_models(
 
     for model_name, study in studies.items():
         best_params = study.best_trial.params.copy()
-        logger.info(
-            "Building best %s model with params: %s", model_name, best_params
-        )
+        logger.info("Building best %s model with params: %s", model_name, best_params)
 
         # Build model-specific full parameter dicts
         if model_name == "xgboost":
@@ -651,6 +637,7 @@ if __name__ == "__main__":
     # ── Load splits ───────────────────────────────────────────────────
     logger.info("Loading training splits from %s", processed_dir)
     from src.data.split import load_splits
+
     try:
         train_df, _, _ = load_splits(settings)
         feat_cols = [c for c in train_df.columns if c != settings.data.target_column]

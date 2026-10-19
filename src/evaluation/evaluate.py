@@ -281,6 +281,7 @@ def run_full_evaluation(
     # ── Step 2: Split validation partition into Calibration & Threshold splits ──
     # Prevents in-sample calibration overfitting and ensures threshold is selected on calibrated holdout
     from sklearn.model_selection import train_test_split
+
     val_indices = np.arange(len(y_val))
     if np.sum(y_val == 1) >= 2:
         cal_idx, thresh_idx = train_test_split(
@@ -296,14 +297,19 @@ def run_full_evaluation(
     amounts_val_thresh = amounts_val[thresh_idx] if amounts_val is not None else None
 
     # ── Step 3: Calibrate model on calibration sub-split ──────────────
-    logger.info("Step 3: Calibrating model with method='%s' on calibration sub-split", eval_cfg.calibration_method)
+    logger.info(
+        "Step 3: Calibrating model with method='%s' on calibration sub-split",
+        eval_cfg.calibration_method,
+    )
     calibrated_model = calibrate_model(
         model, X_val_cal, y_val_cal, method=eval_cfg.calibration_method
     )
     results["calibrated_model"] = calibrated_model
 
     # ── Step 4: Find optimal threshold on calibrated probabilities ────
-    logger.info("Step 4: Finding cost-minimizing threshold on calibrated holdout probabilities")
+    logger.info(
+        "Step 4: Finding cost-minimizing threshold on calibrated holdout probabilities"
+    )
     y_thresh_prob_cal = calibrated_model.predict_proba(X_val_thresh)[:, 1]
 
     optimal_threshold, min_cost = find_optimal_threshold(
@@ -327,7 +333,9 @@ def run_full_evaluation(
     )
     results["val_metrics_optimal"] = val_metrics_optimal
     logger.info(
-        "Validation metrics on calibrated sub-split (t=%.4f): %s", optimal_threshold, val_metrics_optimal
+        "Validation metrics on calibrated sub-split (t=%.4f): %s",
+        optimal_threshold,
+        val_metrics_optimal,
     )
 
     # Full validation set calibrated metrics and diagnostic calibration curve
@@ -520,15 +528,10 @@ if __name__ == "__main__":
     target_column = settings.data.target_column
 
     if target_column not in train_df.columns:
-        raise ValueError(
-            f"Target column '{target_column}' not found in training data."
-        )
+        raise ValueError(f"Target column '{target_column}' not found in training data.")
 
     # Use the same feature selection strategy as the tuning script.
-    feature_columns = [
-        column for column in train_df.columns
-        if column != target_column
-    ]
+    feature_columns = [column for column in train_df.columns if column != target_column]
 
     # Verify that validation and test contain the same features.
     for split_name, split_df in (
@@ -536,13 +539,10 @@ if __name__ == "__main__":
         ("test", test_df),
     ):
         missing = [
-            column for column in feature_columns
-            if column not in split_df.columns
+            column for column in feature_columns if column not in split_df.columns
         ]
         if missing:
-            raise ValueError(
-                f"{split_name} data is missing features: {missing}"
-            )
+            raise ValueError(f"{split_name} data is missing features: {missing}")
 
     # Build feature matrices and target arrays.
     X_train = train_df[feature_columns].to_numpy()
@@ -556,14 +556,10 @@ if __name__ == "__main__":
 
     # Preserve transaction amounts for cost-sensitive evaluation.
     amounts_val: Optional[np.ndarray] = (
-        val_df["Amount"].to_numpy()
-        if "Amount" in val_df.columns
-        else None
+        val_df["Amount"].to_numpy() if "Amount" in val_df.columns else None
     )
     amounts_test: Optional[np.ndarray] = (
-        test_df["Amount"].to_numpy()
-        if "Amount" in test_df.columns
-        else None
+        test_df["Amount"].to_numpy() if "Amount" in test_df.columns else None
     )
 
     logger.info(
@@ -579,14 +575,10 @@ if __name__ == "__main__":
     )
 
     # ── Load tuned XGBoost model ──────────────────────────────────────
-    model_path = (
-        settings.model_dir / "tuned" / "xgboost_pipeline.joblib"
-    )
+    model_path = settings.model_dir / "tuned" / "xgboost_pipeline.joblib"
 
     if not model_path.exists():
-        raise FileNotFoundError(
-            f"Tuned XGBoost model not found: {model_path}"
-        )
+        raise FileNotFoundError(f"Tuned XGBoost model not found: {model_path}")
 
     logger.info("Loading model from %s", model_path)
     model = joblib.load(model_path)
@@ -617,10 +609,7 @@ if __name__ == "__main__":
     print("\n" + "=" * 60)
     print("EVALUATION SUMMARY")
     print("=" * 60)
-    print(
-        f"Optimal threshold: "
-        f"{eval_results['optimal_threshold']:.4f}"
-    )
+    print(f"Optimal threshold: " f"{eval_results['optimal_threshold']:.4f}")
 
     print("\nValidation metrics (calibrated, optimal threshold):")
     for key, value in eval_results["val_metrics_calibrated"].items():
@@ -632,13 +621,10 @@ if __name__ == "__main__":
             print(f"  {key:20s}: {value:.6f}")
 
         print("\nTest confidence intervals:")
-        for key, (mean, lower, upper) in (
-            eval_results["test_confidence_intervals"].items()
-        ):
-            print(
-                f"  {key:20s}: {mean:.4f} "
-                f"[{lower:.4f}, {upper:.4f}]"
-            )
+        for key, (mean, lower, upper) in eval_results[
+            "test_confidence_intervals"
+        ].items():
+            print(f"  {key:20s}: {mean:.4f} " f"[{lower:.4f}, {upper:.4f}]")
     else:
         print("\nTest set: already evaluated (skipped)")
 

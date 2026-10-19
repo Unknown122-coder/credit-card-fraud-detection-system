@@ -17,8 +17,12 @@ from pydantic import BaseModel, Field, field_validator
 class TransactionFeatures(BaseModel):
     """30-dimensional transaction feature payload."""
 
-    Time: float = Field(..., ge=0.0, description="Elapsed seconds since reference transaction")
-    Amount: float = Field(..., ge=0.0, le=500000.0, description="Transaction magnitude in USD")
+    Time: float = Field(
+        ..., ge=0.0, description="Elapsed seconds since reference transaction"
+    )
+    Amount: float = Field(
+        ..., ge=0.0, le=500000.0, description="Transaction magnitude in USD"
+    )
     V1: float
     V2: float
     V3: float
@@ -48,15 +52,46 @@ class TransactionFeatures(BaseModel):
     V27: float
     V28: float
 
-    @field_validator("V1", "V2", "V3", "V4", "V5", "V6", "V7", "V8", "V9", "V10",
-                     "V11", "V12", "V13", "V14", "V15", "V16", "V17", "V18", "V19", "V20",
-                     "V21", "V22", "V23", "V24", "V25", "V26", "V27", "V28", "Time", "Amount",
-                     mode="after")
+    @field_validator(
+        "V1",
+        "V2",
+        "V3",
+        "V4",
+        "V5",
+        "V6",
+        "V7",
+        "V8",
+        "V9",
+        "V10",
+        "V11",
+        "V12",
+        "V13",
+        "V14",
+        "V15",
+        "V16",
+        "V17",
+        "V18",
+        "V19",
+        "V20",
+        "V21",
+        "V22",
+        "V23",
+        "V24",
+        "V25",
+        "V26",
+        "V27",
+        "V28",
+        "Time",
+        "Amount",
+        mode="after",
+    )
     @classmethod
     def check_finite(cls, v: float) -> float:
         """Enforce that no NaN or Infinite values enter the ML pipeline."""
         if math.isnan(v) or math.isinf(v):
-            raise ValueError("Feature value must be a finite numerical float (NaN and Inf forbidden).")
+            raise ValueError(
+                "Feature value must be a finite numerical float (NaN and Inf forbidden)."
+            )
         return v
 
 
@@ -75,11 +110,19 @@ class PredictRequest(BaseModel):
 class PredictResponse(BaseModel):
     """Response returned for a transaction risk evaluation."""
 
-    fraud_probability: float = Field(..., ge=0.0, le=1.0, description="Calibrated risk probability")
-    decision: int = Field(..., description="1 = Flagged as Fraud, 0 = Approved Legitimate")
-    operating_threshold: float = Field(..., description="Decision boundary threshold applied")
+    fraud_probability: float = Field(
+        ..., ge=0.0, le=1.0, description="Calibrated risk probability"
+    )
+    decision: int = Field(
+        ..., description="1 = Flagged as Fraud, 0 = Approved Legitimate"
+    )
+    operating_threshold: float = Field(
+        ..., description="Decision boundary threshold applied"
+    )
     model_version: str = Field(..., description="Active champion model version")
-    expected_cost: float = Field(..., description="Estimated expected financial cost of this decision")
+    expected_cost: float = Field(
+        ..., description="Estimated expected financial cost of this decision"
+    )
 
 
 class BatchPredictRequest(BaseModel):

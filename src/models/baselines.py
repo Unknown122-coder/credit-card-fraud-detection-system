@@ -146,7 +146,11 @@ def run_baseline_comparison(
     X_arr = X_train.values if isinstance(X_train, pd.DataFrame) else np.asarray(X_train)
     y_arr = y_train.values if isinstance(y_train, pd.Series) else np.asarray(y_train)
 
-    if amounts_train is None and isinstance(X_train, pd.DataFrame) and "Amount" in X_train.columns:
+    if (
+        amounts_train is None
+        and isinstance(X_train, pd.DataFrame)
+        and "Amount" in X_train.columns
+    ):
         amounts_arr = X_train["Amount"].to_numpy()
     elif amounts_train is not None:
         amounts_arr = np.asarray(amounts_train)
@@ -160,7 +164,9 @@ def run_baseline_comparison(
     configs = get_baseline_configs()
     records: list[dict[str, Any]] = []
 
-    logger.info("Starting baseline comparison across %d configurations...", len(configs))
+    logger.info(
+        "Starting baseline comparison across %d configurations...", len(configs)
+    )
 
     for exp in configs:
         exp_name: str = exp["name"]
@@ -168,7 +174,12 @@ def run_baseline_comparison(
         resampling: str = exp["resampling"]
         model_params: dict[str, Any] = exp["model_params"]
 
-        logger.info("Evaluating configuration: %s (model=%s, resampling=%s)", exp_name, model_name, resampling)
+        logger.info(
+            "Evaluating configuration: %s (model=%s, resampling=%s)",
+            exp_name,
+            model_name,
+            resampling,
+        )
 
         def make_pipe() -> Any:
             return build_pipeline(
@@ -179,11 +190,13 @@ def run_baseline_comparison(
             )
 
         with mlflow.start_run(run_name=f"baseline_{exp_name}"):
-            mlflow.log_params({
-                "model_name": model_name,
-                "resampling": resampling,
-                **model_params,
-            })
+            mlflow.log_params(
+                {
+                    "model_name": model_name,
+                    "resampling": resampling,
+                    **model_params,
+                }
+            )
 
             metrics, train_time = evaluate_pipeline_cv(
                 pipeline_builder=make_pipe,
@@ -215,14 +228,18 @@ def run_baseline_comparison(
             records.append(record)
 
     results_df = pd.DataFrame(records)
-    results_df = results_df.sort_values(by="PR-AUC", ascending=False).reset_index(drop=True)
+    results_df = results_df.sort_values(by="PR-AUC", ascending=False).reset_index(
+        drop=True
+    )
 
     # Save results
     out_path = Path(output_dir) if output_dir else config.model_dir
     out_path.mkdir(parents=True, exist_ok=True)
     save_comparison_tables(results_df, out_path)
 
-    logger.info("Baseline comparison completed successfully:\n%s", results_df.to_string())
+    logger.info(
+        "Baseline comparison completed successfully:\n%s", results_df.to_string()
+    )
     return results_df
 
 

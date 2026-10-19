@@ -9,7 +9,11 @@ import pandas as pd
 import pytest
 from sklearn.linear_model import LogisticRegression
 
-from src.artifacts.save import compute_sha256, load_model_artifacts, save_model_artifacts
+from src.artifacts.save import (
+    compute_sha256,
+    load_model_artifacts,
+    save_model_artifacts,
+)
 
 
 def test_sha256_checksum_verification_detects_tampering(tmp_path: Path) -> None:

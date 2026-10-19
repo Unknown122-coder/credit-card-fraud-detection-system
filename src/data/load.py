@@ -102,9 +102,7 @@ def validate_schema(df: pd.DataFrame, config: Settings) -> bool:
             )
 
     if dtype_errors:
-        raise ValueError(
-            "Dtype mismatches detected:\n" + "\n".join(dtype_errors)
-        )
+        raise ValueError("Dtype mismatches detected:\n" + "\n".join(dtype_errors))
 
     logger.info("Schema validation passed — %d columns verified.", len(expected_cols))
     return True

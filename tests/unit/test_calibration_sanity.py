@@ -27,7 +27,9 @@ def uncalibrated_synthetic_data() -> tuple[LogisticRegression, np.ndarray, np.nd
     return clf, X_val, y_val
 
 
-def test_calibrate_model_isotonic_produces_valid_probabilities(uncalibrated_synthetic_data: tuple) -> None:
+def test_calibrate_model_isotonic_produces_valid_probabilities(
+    uncalibrated_synthetic_data: tuple,
+) -> None:
     """Verify calibrated model outputs bounded [0, 1] probabilities."""
     clf, X_val, y_val = uncalibrated_synthetic_data
     calibrated = calibrate_model(clf, X_val, y_val, method="isotonic")
@@ -38,7 +40,9 @@ def test_calibrate_model_isotonic_produces_valid_probabilities(uncalibrated_synt
     assert probs.shape[0] == len(y_val)
 
 
-def test_compare_calibration_methods_reports_valid_structure(uncalibrated_synthetic_data: tuple) -> None:
+def test_compare_calibration_methods_reports_valid_structure(
+    uncalibrated_synthetic_data: tuple,
+) -> None:
     """Verify compare_calibration_methods evaluates both isotonic and sigmoid methods."""
     clf, X_val, y_val = uncalibrated_synthetic_data
     comparison = compare_calibration_methods(clf, X_val, y_val)

@@ -27,7 +27,9 @@ def test_threshold_shifts_lower_when_fn_cost_increases() -> None:
         y_true, y_prob, amounts=amounts, fp_cost=20.0, fn_base_cost=1000.0, n_steps=200
     )
 
-    assert t_high_fn <= t_low_fn, "Elevated FN penalty must drive optimal threshold lower or equal"
+    assert (
+        t_high_fn <= t_low_fn
+    ), "Elevated FN penalty must drive optimal threshold lower or equal"
 
 
 def test_threshold_shifts_higher_when_fp_cost_increases() -> None:
@@ -48,7 +50,9 @@ def test_threshold_shifts_higher_when_fp_cost_increases() -> None:
         y_true, y_prob, amounts=amounts, fp_cost=500.0, fn_base_cost=100.0, n_steps=200
     )
 
-    assert t_high_fp >= t_low_fp, "Elevated FP friction cost must drive optimal threshold higher or equal"
+    assert (
+        t_high_fp >= t_low_fp
+    ), "Elevated FP friction cost must drive optimal threshold higher or equal"
 
 
 def test_zero_fraud_leads_to_upper_boundary_threshold() -> None:
@@ -62,4 +66,6 @@ def test_zero_fraud_leads_to_upper_boundary_threshold() -> None:
 
     # Because no fraud exists, optimal policy is to predict 0 for all (threshold > max(y_prob))
     assert min_cost == 0.0
-    assert opt_thresh >= np.max(y_prob) or pytest.approx(opt_thresh, abs=0.05) == np.max(y_prob)
+    assert opt_thresh >= np.max(y_prob) or pytest.approx(
+        opt_thresh, abs=0.05
+    ) == np.max(y_prob)

@@ -72,6 +72,12 @@ def test_no_row_overlap_across_splits(mock_dataset: pd.DataFrame) -> None:
     h_val = get_hashes(val)
     h_test = get_hashes(test)
 
-    assert len(h_train.intersection(h_val)) == 0, "Train and validation splits share identical rows!"
-    assert len(h_train.intersection(h_test)) == 0, "Train and test splits share identical rows!"
-    assert len(h_val.intersection(h_test)) == 0, "Validation and test splits share identical rows!"
+    assert (
+        len(h_train.intersection(h_val)) == 0
+    ), "Train and validation splits share identical rows!"
+    assert (
+        len(h_train.intersection(h_test)) == 0
+    ), "Train and test splits share identical rows!"
+    assert (
+        len(h_val.intersection(h_test)) == 0
+    ), "Validation and test splits share identical rows!"

@@ -45,7 +45,9 @@ class ModelArtifacts:
 def get_git_hash() -> str:
     """Retrieve short Git commit hash if in a Git repository."""
     try:
-        out = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], stderr=subprocess.DEVNULL)
+        out = subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"], stderr=subprocess.DEVNULL
+        )
         return out.decode("utf-8").strip()
     except Exception:
         return "development-local"
@@ -84,6 +86,7 @@ def create_feature_schema(X_train: pd.DataFrame) -> dict[str, Any]:
 
 
 import hashlib
+
 
 def compute_sha256(file_path: Path) -> str:
     """Calculate cryptographic SHA-256 hash of an artifact on disk."""
@@ -184,7 +187,10 @@ def save_model_artifacts(
         "python_version": platform.python_version(),
         "operating_threshold": float(threshold),
         "checksums": checksums,
-        "metrics": {k: float(v) if isinstance(v, (int, float, np.floating)) else v for k, v in metrics.items()},
+        "metrics": {
+            k: float(v) if isinstance(v, (int, float, np.floating)) else v
+            for k, v in metrics.items()
+        },
         "config_snapshot": {
             "dataset_name": config.data.dataset_name,
             "split_strategy": config.data.split_strategy,
@@ -199,7 +205,9 @@ def save_model_artifacts(
     return metadata
 
 
-def load_model_artifacts(model_dir: str | Path, verify_checksums: bool = True) -> ModelArtifacts:
+def load_model_artifacts(
+    model_dir: str | Path, verify_checksums: bool = True
+) -> ModelArtifacts:
     """Load all production artifacts from directory with cryptographic checksum verification.
 
     Parameters
@@ -222,7 +230,11 @@ def load_model_artifacts(model_dir: str | Path, verify_checksums: bool = True) -
     p = Path(model_dir)
 
     metadata_file = p / "model_metadata.json"
-    metadata = json.loads(metadata_file.read_text(encoding="utf-8")) if metadata_file.exists() else {}
+    metadata = (
+        json.loads(metadata_file.read_text(encoding="utf-8"))
+        if metadata_file.exists()
+        else {}
+    )
     checksums = metadata.get("checksums", {})
 
     pipeline_file = p / "champion_pipeline.joblib"
@@ -244,7 +256,9 @@ def load_model_artifacts(model_dir: str | Path, verify_checksums: bool = True) -
         if verify_checksums and "calibrator_sha256" in checksums:
             actual_cal_hash = compute_sha256(calibrator_file)
             if actual_cal_hash != checksums["calibrator_sha256"]:
-                raise PermissionError(f"Security check failed: {calibrator_file.name} SHA-256 hash mismatch!")
+                raise PermissionError(
+                    f"Security check failed: {calibrator_file.name} SHA-256 hash mismatch!"
+                )
         calibrator = joblib.load(calibrator_file)
     else:
         calibrator = None
@@ -257,14 +271,20 @@ def load_model_artifacts(model_dir: str | Path, verify_checksums: bool = True) -
         threshold = 0.5
 
     schema_file = p / "feature_schema.json"
-    schema = json.loads(schema_file.read_text(encoding="utf-8")) if schema_file.exists() else {}
+    schema = (
+        json.loads(schema_file.read_text(encoding="utf-8"))
+        if schema_file.exists()
+        else {}
+    )
 
     explainer_file = p / "shap_explainer.joblib"
     if explainer_file.exists():
         if verify_checksums and "explainer_sha256" in checksums:
             actual_exp_hash = compute_sha256(explainer_file)
             if actual_exp_hash != checksums["explainer_sha256"]:
-                raise PermissionError(f"Security check failed: {explainer_file.name} SHA-256 hash mismatch!")
+                raise PermissionError(
+                    f"Security check failed: {explainer_file.name} SHA-256 hash mismatch!"
+                )
         explainer = joblib.load(explainer_file)
     else:
         explainer = None

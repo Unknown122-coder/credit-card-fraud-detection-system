@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 import matplotlib
+
 matplotlib.use("Agg")  # Headless backend for automation
 import matplotlib.pyplot as plt
 import numpy as np
@@ -100,8 +101,12 @@ def run_full_eda(
     }
 
     # 4. Generate Visualizations
-    _plot_class_imbalance(legit_txns, fraud_txns, save_path / "eda_class_distribution.png")
-    _plot_amount_distributions(amount_legit, amount_fraud, save_path / "eda_amount_distributions.png")
+    _plot_class_imbalance(
+        legit_txns, fraud_txns, save_path / "eda_class_distribution.png"
+    )
+    _plot_amount_distributions(
+        amount_legit, amount_fraud, save_path / "eda_amount_distributions.png"
+    )
     _plot_temporal_patterns(df, save_path / "eda_temporal_patterns.png")
     _plot_top_correlations(df, save_path / "eda_correlations_top_features.png")
 
@@ -139,13 +144,29 @@ def _plot_class_imbalance(legit: int, fraud: int, save_path: Path) -> None:
     plt.close(fig)
 
 
-def _plot_amount_distributions(legit_amt: pd.Series, fraud_amt: pd.Series, save_path: Path) -> None:
+def _plot_amount_distributions(
+    legit_amt: pd.Series, fraud_amt: pd.Series, save_path: Path
+) -> None:
     """Plot distribution and boxplots of Amount for both classes."""
     fig, axes = plt.subplots(1, 2, figsize=(12, 4.5))
 
     # Log1p distribution
-    sns.kdeplot(np.log1p(legit_amt), label="Legitimate", color="#2b5c8f", ax=axes[0], fill=True, alpha=0.3)
-    sns.kdeplot(np.log1p(fraud_amt), label="Fraud", color="#d9534f", ax=axes[0], fill=True, alpha=0.3)
+    sns.kdeplot(
+        np.log1p(legit_amt),
+        label="Legitimate",
+        color="#2b5c8f",
+        ax=axes[0],
+        fill=True,
+        alpha=0.3,
+    )
+    sns.kdeplot(
+        np.log1p(fraud_amt),
+        label="Fraud",
+        color="#d9534f",
+        ax=axes[0],
+        fill=True,
+        alpha=0.3,
+    )
     axes[0].set_title("Log(Amount + 1) Kernel Density Estimate")
     axes[0].set_xlabel("log(Amount + 1)")
     axes[0].set_ylabel("Density")
@@ -153,10 +174,12 @@ def _plot_amount_distributions(legit_amt: pd.Series, fraud_amt: pd.Series, save_
     axes[0].grid(True, linestyle="--", alpha=0.5)
 
     # Boxplot of Amount (clipped for visibility)
-    plot_df = pd.DataFrame({
-        "Amount": pd.concat([legit_amt, fraud_amt]),
-        "Class": ["Legitimate"] * len(legit_amt) + ["Fraud"] * len(fraud_amt),
-    })
+    plot_df = pd.DataFrame(
+        {
+            "Amount": pd.concat([legit_amt, fraud_amt]),
+            "Class": ["Legitimate"] * len(legit_amt) + ["Fraud"] * len(fraud_amt),
+        }
+    )
     sns.boxplot(
         data=plot_df,
         x="Class",
@@ -184,14 +207,22 @@ def _plot_temporal_patterns(df: pd.DataFrame, save_path: Path) -> None:
 
     # Total volume by hour
     volume_by_hour = temp_df.groupby("Hour")["Class"].count()
-    axes[0].plot(volume_by_hour.index, volume_by_hour.values, marker="o", color="#2b5c8f", lw=2)
+    axes[0].plot(
+        volume_by_hour.index, volume_by_hour.values, marker="o", color="#2b5c8f", lw=2
+    )
     axes[0].set_title("Hourly Total Transaction Volume")
     axes[0].set_ylabel("Total Transactions")
     axes[0].grid(True, linestyle="--", alpha=0.5)
 
     # Fraud rate by hour
     fraud_rate_by_hour = temp_df.groupby("Hour")["Class"].mean() * 100
-    axes[1].plot(fraud_rate_by_hour.index, fraud_rate_by_hour.values, marker="s", color="#d9534f", lw=2)
+    axes[1].plot(
+        fraud_rate_by_hour.index,
+        fraud_rate_by_hour.values,
+        marker="s",
+        color="#d9534f",
+        lw=2,
+    )
     axes[1].set_title("Hourly Fraud Rate (%)")
     axes[1].set_xlabel("Hour of Day (0-23)")
     axes[1].set_ylabel("Fraud Percentage (%)")
