@@ -85,9 +85,6 @@ def create_feature_schema(X_train: pd.DataFrame) -> dict[str, Any]:
     return schema
 
 
-
-
-
 def compute_sha256(file_path: Path) -> str:
     """Calculate cryptographic SHA-256 hash of an artifact on disk."""
     hasher = hashlib.sha256()
