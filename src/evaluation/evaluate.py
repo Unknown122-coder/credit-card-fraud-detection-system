@@ -506,38 +506,100 @@ def _log_to_mlflow(results: dict[str, Any], config: Settings) -> None:
 
 if __name__ == "__main__":
     from src.utils.logger import setup_logging
+    from src.data.split import load_splits
 
     settings = get_settings()
     setup_logging(settings.project.log_level)
     set_global_seed(settings.project.seed)
 
-    # ── Load data splits ─────────────────────────────────────────────
+    # ── Load data splits from Parquet ─────────────────────────────────
     processed_dir = settings.processed_dir
     logger.info("Loading data splits from %s", processed_dir)
 
-    X_train = np.load(processed_dir / "X_train.npy")
-    y_train = np.load(processed_dir / "y_train.npy")
-    X_val = np.load(processed_dir / "X_val.npy")
-    y_val = np.load(processed_dir / "y_val.npy")
-    X_test = np.load(processed_dir / "X_test.npy")
-    y_test = np.load(processed_dir / "y_test.npy")
+    train_df, val_df, test_df = load_splits(settings)
+    target_column = settings.data.target_column
 
-    # Load amounts if available
-    amounts_val: Optional[np.ndarray] = None
-    amounts_test: Optional[np.ndarray] = None
-    amounts_val_path = processed_dir / "amounts_val.npy"
-    amounts_test_path = processed_dir / "amounts_test.npy"
-    if amounts_val_path.exists():
-        amounts_val = np.load(amounts_val_path)
-    if amounts_test_path.exists():
-        amounts_test = np.load(amounts_test_path)
+    if target_column not in train_df.columns:
+        raise ValueError(
+            f"Target column '{target_column}' not found in training data."
+        )
 
-    # ── Load best model ──────────────────────────────────────────────
-    model_path = settings.model_dir / settings.artifacts.pipeline_filename
+    # Use the same feature selection strategy as the tuning script.
+    feature_columns = [
+        column for column in train_df.columns
+        if column != target_column
+    ]
+
+    # Verify that validation and test contain the same features.
+    for split_name, split_df in (
+        ("validation", val_df),
+        ("test", test_df),
+    ):
+        missing = [
+            column for column in feature_columns
+            if column not in split_df.columns
+        ]
+        if missing:
+            raise ValueError(
+                f"{split_name} data is missing features: {missing}"
+            )
+
+    # Build feature matrices and target arrays.
+    X_train = train_df[feature_columns].to_numpy()
+    y_train = train_df[target_column].to_numpy()
+
+    X_val = val_df[feature_columns].to_numpy()
+    y_val = val_df[target_column].to_numpy()
+
+    X_test = test_df[feature_columns].to_numpy()
+    y_test = test_df[target_column].to_numpy()
+
+    # Preserve transaction amounts for cost-sensitive evaluation.
+    amounts_val: Optional[np.ndarray] = (
+        val_df["Amount"].to_numpy()
+        if "Amount" in val_df.columns
+        else None
+    )
+    amounts_test: Optional[np.ndarray] = (
+        test_df["Amount"].to_numpy()
+        if "Amount" in test_df.columns
+        else None
+    )
+
+    logger.info(
+        "Loaded splits: train=%s, validation=%s, test=%s",
+        X_train.shape,
+        X_val.shape,
+        X_test.shape,
+    )
+    logger.info(
+        "Feature count: %d; training fraud ratio: %.6f",
+        len(feature_columns),
+        float(np.mean(y_train)),
+    )
+
+    # ── Load tuned XGBoost model ──────────────────────────────────────
+    model_path = (
+        settings.model_dir / "tuned" / "xgboost_pipeline.joblib"
+    )
+
+    if not model_path.exists():
+        raise FileNotFoundError(
+            f"Tuned XGBoost model not found: {model_path}"
+        )
+
     logger.info("Loading model from %s", model_path)
     model = joblib.load(model_path)
 
-    # ── Run evaluation ───────────────────────────────────────────────
+    # Check feature compatibility before running evaluation.
+    if hasattr(model, "n_features_in_"):
+        if model.n_features_in_ != X_train.shape[1]:
+            raise ValueError(
+                f"Model expects {model.n_features_in_} features, "
+                f"but the data contains {X_train.shape[1]}."
+            )
+
+    # ── Run evaluation ────────────────────────────────────────────────
     eval_results = run_full_evaluation(
         model=model,
         X_train=X_train,
@@ -551,22 +613,32 @@ if __name__ == "__main__":
         amounts_test=amounts_test,
     )
 
-    # Print summary
+    # ── Print summary ─────────────────────────────────────────────────
     print("\n" + "=" * 60)
     print("EVALUATION SUMMARY")
     print("=" * 60)
-    print(f"Optimal threshold: {eval_results['optimal_threshold']:.4f}")
+    print(
+        f"Optimal threshold: "
+        f"{eval_results['optimal_threshold']:.4f}"
+    )
+
     print("\nValidation metrics (calibrated, optimal threshold):")
-    for k, v in eval_results["val_metrics_calibrated"].items():
-        print(f"  {k:20s}: {v:.6f}")
+    for key, value in eval_results["val_metrics_calibrated"].items():
+        print(f"  {key:20s}: {value:.6f}")
 
     if eval_results.get("test_metrics") is not None:
         print("\nTest metrics:")
-        for k, v in eval_results["test_metrics"].items():
-            print(f"  {k:20s}: {v:.6f}")
-        print("\nTest confidence intervals (95%):")
-        for k, (mean, lo, hi) in eval_results["test_confidence_intervals"].items():
-            print(f"  {k:20s}: {mean:.4f}  [{lo:.4f}, {hi:.4f}]")
+        for key, value in eval_results["test_metrics"].items():
+            print(f"  {key:20s}: {value:.6f}")
+
+        print("\nTest confidence intervals:")
+        for key, (mean, lower, upper) in (
+            eval_results["test_confidence_intervals"].items()
+        ):
+            print(
+                f"  {key:20s}: {mean:.4f} "
+                f"[{lower:.4f}, {upper:.4f}]"
+            )
     else:
         print("\nTest set: already evaluated (skipped)")
 

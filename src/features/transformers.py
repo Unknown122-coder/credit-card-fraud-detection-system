@@ -139,9 +139,13 @@ class HourOfDayTransformer(BaseEstimator, TransformerMixin):
         self,
         time_col: str = "Time",
         drop_original: bool = True,
+        drop_original_time: bool | None = None,
     ) -> None:
         self.time_col = time_col
-        self.drop_original = drop_original
+        self.drop_original = (
+            drop_original if drop_original_time is None else drop_original_time
+        )
+        self.drop_original_time = drop_original_time
 
     def fit(
         self,

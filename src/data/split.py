@@ -363,3 +363,27 @@ def _log_split_summary(
             n_fraud,
             fraud_rate,
         )
+
+
+def main() -> None:
+    """Load the raw dataset, split it, and save the resulting files."""
+    config = get_settings()
+
+    if not config.raw_data_path.exists():
+        raise FileNotFoundError(
+            f"Dataset not found: {config.raw_data_path}"
+        )
+
+    logger.info("Loading dataset from %s", config.raw_data_path)
+    df = pd.read_csv(config.raw_data_path)
+
+    logger.info("Loaded dataset with %d rows and %d columns", *df.shape)
+
+    train, val, test = split_data(df, config)
+    save_splits(train, val, test, config)
+
+    logger.info("Data splitting completed successfully.")
+
+
+if __name__ == "__main__":
+    main()

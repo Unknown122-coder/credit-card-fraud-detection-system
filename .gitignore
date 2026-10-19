@@ -84,3 +84,20 @@ coverage.xml
 docs/figures/*.png
 docs/figures/*.html
 !docs/figures/.gitkeep
+
+# Model registry artifacts
+models/registry/*.joblib
+models/registry/**/*.joblib
+models/registry/*.pkl
+models/registry/**/*.pkl
+models/registry/*.json
+models/registry/**/*.json
+models/registry/*.csv
+
+# Temporary and generated artifacts
+catboost_info/
+*.bak
+models/registry/.test_evaluated
+
+# Large interactive optimization reports
+docs/figures/optuna/*.html

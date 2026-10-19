@@ -73,32 +73,6 @@ def get_feature_group(feature_name: str) -> str:
     return FEATURE_GROUP_MAP.get(feature_name, "General Transaction Attribute")
 
 
-def create_explainer(
-    model: BaseEstimator,
-    X_background: pd.DataFrame | np.ndarray,
-    max_samples: int = 100,
-    seed: int = 42,
-) -> shap.Explainer:
-    """Create a SHAP explainer instance with memory-bounded background samples.
-
-    Extracts the underlying tree estimator if passed an imblearn/sklearn Pipeline.
-
-    Parameters
-    ----------
-    model:
-        Trained classifier or Pipeline.
-    X_background:
-        Background reference dataset.
-    max_samples:
-        Maximum background instances to sample for computational efficiency.
-    seed:
-        Random state for sampling.
-
-    Returns
-    -------
-    shap.Explainer
-        Fitted SHAP explainer (TreeExplainer when possible).
-    """
 def transform_features_through_pipeline(model: Any, X: pd.DataFrame | np.ndarray) -> np.ndarray:
     """Transform features through all pipeline steps prior to the final classifier.
 

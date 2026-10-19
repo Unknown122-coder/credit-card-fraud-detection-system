@@ -18,6 +18,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, AsyncGenerator, List, Optional
+from fastapi.exceptions import RequestValidationError
 
 import numpy as np
 import pandas as pd
@@ -133,6 +134,26 @@ async def audit_logging_middleware(request: Request, call_next: Any) -> Any:
     response.headers["X-Request-ID"] = req_id
     response.headers["X-Response-Time-Ms"] = f"{duration_ms:.2f}"
     return response
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(
+    request: Request,
+    exc: RequestValidationError,
+) -> JSONResponse:
+    """Return JSON-safe details for invalid request payloads."""
+    errors = [
+        {
+            "loc": list(error.get("loc", ())),
+            "msg": error.get("msg", "Invalid value"),
+            "type": error.get("type", "value_error"),
+        }
+        for error in exc.errors()
+    ]
+
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={"detail": errors},
+    )
 
 
 @app.exception_handler(Exception)

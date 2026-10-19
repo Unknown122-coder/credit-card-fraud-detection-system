@@ -30,18 +30,28 @@ def generate_all_explanations(config: Optional[Settings] = None) -> None:
         config = get_settings()
 
     set_global_seed(config.project.seed)
-
     model_dir = config.model_dir
     pipeline_path = model_dir / config.artifacts.pipeline_filename
 
+    # Prefer the configured champion; fall back to the tuned XGBoost model.
     if not pipeline_path.exists():
-        logger.warning(
-            "Champion pipeline not found at %s. Please train a model first (e.g. make evaluate).",
-            pipeline_path,
-        )
-        return
+        fallback_path = model_dir / "tuned" / "xgboost_pipeline.joblib"
 
-    logger.info("Loading champion pipeline from %s", pipeline_path)
+        if fallback_path.exists():
+            pipeline_path = fallback_path
+            logger.info(
+                "Champion pipeline not found; using tuned XGBoost model at %s",
+                pipeline_path,
+            )
+        else:
+            logger.warning(
+                "No model found. Checked champion at %s and fallback at %s.",
+                model_dir / config.artifacts.pipeline_filename,
+                fallback_path,
+            )
+            return
+
+    logger.info("Loading model from %s", pipeline_path)
     pipeline = joblib.load(pipeline_path)
 
     # Load validation data for background and explanation samples
@@ -50,6 +60,15 @@ def generate_all_explanations(config: Optional[Settings] = None) -> None:
     X_val = val_df[feature_cols]
 
     # Initialize SHAP explainer
+    from src.explain.shap_utils import transform_features_through_pipeline
+
+    # Sample validation data once, preserving original feature names.
+    X_sample = X_val.sample(
+        n=min(300, len(X_val)),
+        random_state=config.project.seed,
+    )
+
+    # Initialize SHAP using the pipeline's scaled feature space.
     explainer = create_explainer(
         model=pipeline,
         X_background=X_val,
@@ -57,12 +76,26 @@ def generate_all_explanations(config: Optional[Settings] = None) -> None:
         seed=config.project.seed,
     )
 
-    # Generate and save global plots
+    # Transform explanation rows into the same space used by the tree.
+    X_sample_scaled = transform_features_through_pipeline(
+        pipeline,
+        X_sample,
+    )
+
+    # Restore feature names for readable SHAP plots.
+    X_sample_scaled = pd.DataFrame(
+        X_sample_scaled,
+        columns=feature_cols,
+        index=X_sample.index,
+    )
+
+    # Generate and save global plots.
     figures_dir = config.figures_dir
     logger.info("Generating global SHAP visualizations in %s", figures_dir)
+
     generate_global_plots(
         explainer=explainer,
-        X_sample=X_val.sample(n=min(300, len(X_val)), random_state=config.project.seed),
+        X_sample=X_sample_scaled,
         save_dir=figures_dir,
     )
 
