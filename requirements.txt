@@ -51,7 +51,6 @@ pytest-benchmark==4.0.0
 # Code Quality
 black==24.4.2
 ruff==0.4.8
-mypy==1.10.0
 
 # Utilities
 tqdm==4.66.4
