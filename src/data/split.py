@@ -18,6 +18,7 @@ from pathlib import Path
 
 import pandas as pd
 from sklearn.model_selection import train_test_split
+from typing import Any, Callable
 
 from src.config import Settings, get_settings
 
@@ -57,13 +58,7 @@ def split_data(
         config = get_settings()
 
     strategy = config.data.split_strategy
-    dispatch: dict[
-        str,
-        type[
-            # Callable signature — accepts (df, config) → 3-tuple
-            ...,  # type: ignore[type-arg]
-        ],
-    ] = {
+    dispatch: dict[str, Callable[..., tuple[Any, Any, Any]]] = {
         "time_based": time_based_split,
         "stratified": stratified_split,
     }

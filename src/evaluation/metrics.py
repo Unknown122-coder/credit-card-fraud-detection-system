@@ -181,8 +181,14 @@ def find_optimal_threshold(
     high_steps = max(20, n_steps - low_steps)
     low_sweep = np.geomspace(min_prob, 0.05, low_steps)
     high_sweep = np.linspace(0.05, 0.99, high_steps)
-    thresholds = np.unique(
-        np.clip(np.concatenate(([1e-4], low_sweep, high_sweep, [0.99])), 1e-4, 0.99)
+    thresholds: np.ndarray = np.unique(
+        np.clip(
+            np.concatenate(
+                (np.array([1e-4]), low_sweep, high_sweep, np.array([0.99]))
+            ),
+            1e-4,
+            0.99,
+        )
     )
     best_threshold: float = 0.5
     best_cost: float = float("inf")

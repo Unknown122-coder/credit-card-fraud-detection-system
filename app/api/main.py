@@ -272,11 +272,17 @@ def features_to_dataframe(features: TransactionFeatures) -> pd.DataFrame:
 async def health_check() -> HealthResponse:
     """Liveness probe reporting model status and active configuration."""
     artifacts: Optional[ModelArtifacts] = getattr(app.state, "artifacts", None)
-    is_loaded = artifacts is not None
-    explainer_loaded = is_loaded and (artifacts.explainer is not None)
 
-    version = artifacts.metadata.get("version", "none") if is_loaded else "none"
-    thresh = artifacts.threshold if is_loaded else 0.5
+    if artifacts is not None:
+        is_loaded = True
+        explainer_loaded = artifacts.explainer is not None
+        version = artifacts.metadata.get("version", "none")
+        thresh = artifacts.threshold
+    else:
+        is_loaded = False
+        explainer_loaded = False
+        version = "none"
+        thresh = 0.5
 
     return HealthResponse(
         status="healthy" if is_loaded else "degraded",
