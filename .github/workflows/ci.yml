@@ -36,9 +36,8 @@ jobs:
         run: |
           ruff check src/ app/ tests/
 
-      - name: Run type checking (mypy)
-        run: |
-          mypy src/ app/ --ignore-missing-imports
+      - name: Run mypy
+        run: mypy src/ app/ --ignore-missing-imports --follow-imports=silent
 
       - name: Run unit test suite
         run: |

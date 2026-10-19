@@ -55,3 +55,7 @@ mypy==1.10.0
 
 # Utilities
 tqdm==4.66.4
+
+mypy>=1.11.0
+types-PyYAML
+types-requests
