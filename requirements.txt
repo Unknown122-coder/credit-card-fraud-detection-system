@@ -1,41 +1,49 @@
 # ──────────────────────────────────────────────────
 # Credit Card Fraud Detection System - Runtime Dependencies
+#
+# Versions are pinned exactly. The serialized artifacts in models/registry/
+# (champion_pipeline.joblib, calibrator.joblib, shap_explainer.joblib) are
+# pickles produced by this exact dependency set. Loosening these pins lets a
+# fresh deployment resolve newer scikit-learn/xgboost/shap releases, which
+# unpickle into objects whose internals no longer match and break the
+# TreeSHAP explanation path at runtime. Re-run the training pipeline and
+# regenerate the artifacts before bumping anything here.
 # ──────────────────────────────────────────────────
 
 # Core ML & Numerical
-numpy>=1.26.4,<2.0.0
-scipy>=1.13.1
-pandas>=2.2.2
-scikit-learn>=1.5.0
-imbalanced-learn>=0.12.3
+numpy==1.26.4
+scipy==1.13.1
+pandas==2.2.2
+scikit-learn==1.5.0
+imbalanced-learn==0.12.3
 
 # Gradient Boosting
-xgboost>=2.0.3
-lightgbm>=4.3.0
+xgboost==2.0.3
+lightgbm==4.3.0
 
 # Explainability
-shap>=0.45.1
-matplotlib>=3.9.0
-seaborn>=0.13.2
+shap==0.45.1
+matplotlib==3.9.0
+seaborn==0.13.2
 
 # Serialization & Runtime
-joblib>=1.4.2
+joblib==1.4.2
 
 # Configuration
-pydantic>=2.7.4
-pydantic-settings>=2.3.4
-pyyaml>=6.0.1
+pydantic==2.7.4
+pydantic-settings==2.3.4
+pyyaml==6.0.1
 
 # API & Serving
-fastapi>=0.111.0
-uvicorn[standard]>=0.30.1
-python-multipart>=0.0.9
-httpx>=0.27.0
+fastapi==0.111.0
+uvicorn[standard]==0.30.1
+python-multipart==0.0.9
+httpx==0.27.0
 
 # Frontend & UI
-streamlit>=1.35.0
-requests>=2.32.3
-plotly>=5.22.0
+streamlit==1.35.0
+requests==2.32.3
+plotly==5.22.0
 
 # Utilities
-tqdm>=4.66.4
+tqdm==4.66.4

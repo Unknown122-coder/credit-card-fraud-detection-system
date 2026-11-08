@@ -187,7 +187,8 @@ def create_lightgbm_objective(
             model = LGBMClassifier(**params)
             model.fit(X_tr, y_tr)
 
-            y_prob = model.predict_proba(X_val)[:, 1]
+            # np.asarray: LightGBM types predict_proba as ndarray | sparse | list
+            y_prob = np.asarray(model.predict_proba(X_val))[:, 1]
             score = average_precision_score(y_val, y_prob)
             fold_scores.append(score)
 

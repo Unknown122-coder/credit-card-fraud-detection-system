@@ -13,8 +13,10 @@ pytest-cov==5.0.0
 pytest-benchmark==4.0.0
 
 # Code Quality & Formatting
+# Pinned exactly: a floating type checker or stub package silently turns CI red
+# on an unchanged codebase when upstream adds new inference rules.
 black==24.4.2
 ruff==0.4.8
-mypy>=1.11.0
-types-PyYAML
-types-requests
+mypy==2.4.1
+types-PyYAML==6.0.12.20261103
+types-requests==2.33.0.20261030
