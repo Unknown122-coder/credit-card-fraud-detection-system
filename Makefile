@@ -10,6 +10,7 @@ help: ## Show this help message
 
 setup: ## Install dependencies and create directories
 	$(PIP) install -r requirements.txt
+	@if [ -f requirements-dev.txt ]; then $(PIP) install -r requirements-dev.txt; fi
 	mkdir -p data/raw data/processed data/external data/sample_payloads
 	mkdir -p models/registry
 	mkdir -p docs/figures
