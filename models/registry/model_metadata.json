@@ -1,0 +1,19 @@
+{
+  "model_name": "credit-card-fraud-detection",
+  "version": "1.0.0",
+  "model_family": "XGBoost (Calibrated Isotonic)",
+  "split_strategy": "time_based",
+  "operating_threshold": 0.04756544130339639,
+  "metrics": {
+    "pr_auc": 0.884,
+    "roc_auc": 0.985,
+    "recall_at_fixed_precision_80": 0.825,
+    "f1_score": 0.841,
+    "f2_score": 0.835,
+    "expected_cost_per_transaction": 0.18
+  },
+  "business_parameters": {
+    "fp_cost": 10.0,
+    "fn_base_cost": 25.0
+  }
+}

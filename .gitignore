@@ -87,14 +87,12 @@ coverage.xml
 .pytest_cache/
 
 # Docs generated figures (keep the directory)
-docs/figures/*.png
-docs/figures/*.html
+# Exclude heavy interactive optuna html reports
+docs/figures/optuna/*.html
 !docs/figures/.gitkeep
+!docs/figures/*.csv
 
 # Temporary and generated artifacts
 catboost_info/
 *.bak
 models/registry/.test_evaluated
-
-# Large interactive optimization reports
-docs/figures/optuna/*.html
