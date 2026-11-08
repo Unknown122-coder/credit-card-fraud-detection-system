@@ -213,6 +213,34 @@ def sanitize_csv_injection(df_to_clean: pd.DataFrame) -> pd.DataFrame:
     return cleaned
 
 
+@st.cache_resource
+def _get_or_rebuild_explainer(_local: Any, force: bool = False) -> Optional[Any]:
+    """Rebuild SHAP TreeExplainer when the pickled one is version-incompatible.
+
+    Uses Streamlit's cache so this only runs once per session.
+    """
+    if not force and _local.explainer is not None:
+        return _local.explainer
+
+    try:
+        import shap
+
+        pipeline = _local.pipeline
+        estimator = pipeline
+        if hasattr(pipeline, "named_steps"):
+            if "classifier" in pipeline.named_steps:
+                estimator = pipeline.named_steps["classifier"]
+            elif len(pipeline.steps) > 0:
+                estimator = pipeline.steps[-1][1]
+
+        explainer = shap.TreeExplainer(estimator)
+        logger.info("Rebuilt SHAP TreeExplainer in-process for cloud compatibility")
+        return explainer
+    except Exception as exc:
+        logger.error(f"Failed to rebuild SHAP explainer: {exc}")
+        return None
+
+
 def call_predict(payload: dict[str, Any]) -> Optional[dict[str, Any]]:
     """Send scoring request to /predict endpoint, with seamless in-process fallback."""
     try:
@@ -232,7 +260,9 @@ def call_predict(payload: dict[str, Any]) -> Optional[dict[str, Any]]:
             thresh = payload.get("override_threshold")
             if thresh is None:
                 thresh = local.threshold
-            probs, decisions, costs = score_dataframe(df, local, threshold=float(thresh))
+            probs, decisions, costs = score_dataframe(
+                df, local, threshold=float(thresh)
+            )
             return {
                 "fraud_probability": float(probs[0]),
                 "decision": int(decisions[0]),
@@ -244,7 +274,9 @@ def call_predict(payload: dict[str, Any]) -> Optional[dict[str, Any]]:
             st.error(f"In-process prediction error: {exc}")
             return None
 
-    st.error(f"Cannot reach prediction service at {API_BASE_URL} and no local model found.")
+    st.error(
+        f"Cannot reach prediction service at {API_BASE_URL} and no local model found."
+    )
     return None
 
 
@@ -258,14 +290,36 @@ def call_explain(payload: dict[str, Any]) -> Optional[dict[str, Any]]:
         pass
 
     local = get_local_artifacts()
-    if local is not None and local.explainer is not None:
+    if local is not None:
         try:
             from src.explain.shap_utils import compute_local_explanation
 
             df = pd.DataFrame([payload["transaction"]])[FEATURE_COLS]
-            explanation = compute_local_explanation(
-                local.explainer, df, top_n=10, pipeline=local.pipeline
-            )
+
+            # Use the cached explainer, or rebuild if deserialized one is incompatible
+            explainer = local.explainer
+            if explainer is None:
+                explainer = _get_or_rebuild_explainer(local)
+            if explainer is None:
+                st.warning(
+                    "SHAP explainer not available. Generate one locally with: `make explain`"
+                )
+                return None
+
+            try:
+                explanation = compute_local_explanation(
+                    explainer, df, top_n=10, pipeline=local.pipeline
+                )
+            except (AttributeError, TypeError):
+                # Pickled explainer version mismatch — rebuild from live model
+                explainer = _get_or_rebuild_explainer(local, force=True)
+                if explainer is None:
+                    st.warning("Could not rebuild SHAP explainer for this environment.")
+                    return None
+                explanation = compute_local_explanation(
+                    explainer, df, top_n=10, pipeline=local.pipeline
+                )
+
             return {
                 "base_value": explanation["base_value"],
                 "prediction_score": explanation["prediction_score"],
@@ -273,6 +327,7 @@ def call_explain(payload: dict[str, Any]) -> Optional[dict[str, Any]]:
                 "summary_text": explanation["summary_text"],
             }
         except Exception as exc:
+            logger.error(f"In-process SHAP error: {exc}")
             st.warning(f"In-process SHAP calculation notice: {exc}")
             return None
 
