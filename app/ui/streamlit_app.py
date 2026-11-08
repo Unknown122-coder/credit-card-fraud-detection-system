@@ -128,19 +128,42 @@ PRESET_FRAUD: dict[str, float] = {
 
 
 # ---------------------------------------------------------------------------
-# API Client Helpers
+# API Client & Standalone In-Process Helpers
 # ---------------------------------------------------------------------------
+
+
+@st.cache_resource
+def get_local_artifacts() -> Optional[Any]:
+    """Load local model artifacts for in-process fallback (e.g. Streamlit Cloud)."""
+    try:
+        from src.artifacts.save import load_model_artifacts
+        from src.config import get_settings
+
+        settings = get_settings()
+        if (settings.model_dir / "champion_pipeline.joblib").exists():
+            return load_model_artifacts(settings.model_dir, verify_checksums=False)
+    except Exception:
+        pass
+    return None
 
 
 @st.cache_data(ttl=10)
 def check_api_health() -> Optional[dict[str, Any]]:
-    """Query FastAPI liveness probe with 10s caching."""
+    """Query FastAPI liveness probe, falling back to local in-process model if running standalone."""
     try:
-        resp = requests.get(f"{API_BASE_URL}/health", timeout=2.0)
+        resp = requests.get(f"{API_BASE_URL}/health", timeout=1.5)
         if resp.status_code == 200:
             return resp.json()
     except Exception:
         pass
+
+    local = get_local_artifacts()
+    if local is not None:
+        return {
+            "status": "healthy",
+            "model_version": local.metadata.get("version", "1.0.0") + " (Cloud Standalone)",
+            "operating_threshold": local.threshold,
+        }
     return None
 
 
@@ -170,33 +193,76 @@ def sanitize_csv_injection(df_to_clean: pd.DataFrame) -> pd.DataFrame:
 
 
 def call_predict(payload: dict[str, Any]) -> Optional[dict[str, Any]]:
-    """Send scoring request to /predict endpoint."""
+    """Send scoring request to /predict endpoint, with seamless in-process fallback."""
     try:
         resp = requests.post(f"{API_BASE_URL}/predict", json=payload, timeout=5.0)
         if resp.status_code == 200:
             return resp.json()
-        st.error(f"Prediction failed with status {resp.status_code}: {resp.text}")
-    except Exception as exc:
-        st.error(f"Cannot reach prediction service at {API_BASE_URL}: {exc}")
+    except Exception:
+        pass
+
+    # In-process fallback for cloud hosting (e.g. Streamlit Community Cloud)
+    local = get_local_artifacts()
+    if local is not None:
+        try:
+            from app.api.main import score_dataframe
+
+            df = pd.DataFrame([payload["transaction"]])[FEATURE_COLS]
+            thresh = payload.get("override_threshold")
+            if thresh is None:
+                thresh = local.threshold
+            probs, decisions, costs = score_dataframe(df, local, threshold=float(thresh))
+            return {
+                "fraud_probability": float(probs[0]),
+                "decision": int(decisions[0]),
+                "operating_threshold": float(thresh),
+                "model_version": local.metadata.get("version", "1.0.0"),
+                "expected_cost": round(float(costs[0]), 2),
+            }
+        except Exception as exc:
+            st.error(f"In-process prediction error: {exc}")
+            return None
+
+    st.error(f"Cannot reach prediction service at {API_BASE_URL} and no local model found.")
     return None
 
 
 def call_explain(payload: dict[str, Any]) -> Optional[dict[str, Any]]:
-    """Send explanation request to /explain endpoint."""
+    """Send explanation request to /explain endpoint, with seamless in-process fallback."""
     try:
         resp = requests.post(f"{API_BASE_URL}/explain", json=payload, timeout=8.0)
         if resp.status_code == 200:
             return resp.json()
-        st.warning("Local explanation could not be generated for this transaction.")
-    except Exception as exc:
-        st.warning(f"Explainability service error: {exc}")
+    except Exception:
+        pass
+
+    local = get_local_artifacts()
+    if local is not None and local.explainer is not None:
+        try:
+            from src.explain.shap_utils import compute_local_explanation
+
+            df = pd.DataFrame([payload["transaction"]])[FEATURE_COLS]
+            explanation = compute_local_explanation(
+                local.explainer, df, top_n=10, pipeline=local.pipeline
+            )
+            return {
+                "base_value": explanation["base_value"],
+                "prediction_score": explanation["prediction_score"],
+                "top_attributions": explanation["top_attributions"],
+                "summary_text": explanation["summary_text"],
+            }
+        except Exception as exc:
+            st.warning(f"In-process SHAP calculation notice: {exc}")
+            return None
+
+    st.warning("Local explanation could not be generated for this transaction.")
     return None
 
 
 def call_predict_batch_csv(
     file_bytes: bytes, threshold: float
 ) -> Optional[dict[str, Any]]:
-    """Upload CSV to /predict_batch_csv."""
+    """Upload CSV to /predict_batch_csv, with seamless in-process fallback."""
     try:
         files = {"file": ("upload.csv", file_bytes, "text/csv")}
         params = {"override_threshold": threshold}
@@ -208,9 +274,46 @@ def call_predict_batch_csv(
         )
         if resp.status_code == 200:
             return resp.json()
-        st.error(f"Batch scoring failed: {resp.text}")
-    except Exception as exc:
-        st.error(f"Batch API connection failed: {exc}")
+    except Exception:
+        pass
+
+    local = get_local_artifacts()
+    if local is not None:
+        try:
+            from app.api.main import score_dataframe
+
+            df = pd.read_csv(io.BytesIO(file_bytes))
+            for col in FEATURE_COLS:
+                df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0.0)
+            probs, decisions, costs = score_dataframe(
+                df[FEATURE_COLS], local, threshold=threshold
+            )
+            results = []
+            for p, d, c in zip(probs, decisions, costs):
+                results.append(
+                    {
+                        "fraud_probability": float(p),
+                        "decision": int(d),
+                        "operating_threshold": float(threshold),
+                        "model_version": local.metadata.get("version", "1.0.0"),
+                        "expected_cost": round(float(c), 2),
+                    }
+                )
+            total = len(results)
+            flagged = int(sum(decisions))
+            return {
+                "total_processed": total,
+                "flagged_count": flagged,
+                "flagged_ratio": round(flagged / max(total, 1), 4),
+                "operating_threshold": float(threshold),
+                "model_version": local.metadata.get("version", "1.0.0"),
+                "results": results,
+            }
+        except Exception as exc:
+            st.error(f"In-process batch scoring failed: {exc}")
+            return None
+
+    st.error(f"Batch API connection failed at {API_BASE_URL}.")
     return None
 
 

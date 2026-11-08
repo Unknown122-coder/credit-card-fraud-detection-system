@@ -1,0 +1,6 @@
+{
+  "optimal_threshold": 0.04756544130339639,
+  "fp_cost": 10.0,
+  "fn_base_cost": 25.0,
+  "calibration_method": "isotonic"
+}

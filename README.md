@@ -1,10 +1,13 @@
 # 🛡️ End-to-End Credit Card Fraud Detection System
 
+[![Live Demo](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://credit-card-fraud-detection-system.streamlit.app)
 [![CI Pipeline](https://github.com/Unknown122-coder/credit-card-fraud-detection-system/actions/workflows/ci.yml/badge.svg)](https://github.com/Unknown122-coder/credit-card-fraud-detection-system/actions)
 [![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/downloads/release/python-3110/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.111.0-009688.svg?logo=fastapi)](https://fastapi.tiangolo.com)
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.35.0-FF4B4B.svg?logo=streamlit)](https://streamlit.io)
+
+> 🚀 **Live Interactive Demo:** [**credit-card-fraud-detection-system.streamlit.app**](https://credit-card-fraud-detection-system.streamlit.app)
 
 A production-grade, cost-sensitive Machine Learning system designed to intercept financial transactions under extreme class imbalance ($<0.2\%$ fraud rate). Combines gradient-boosted ensembles (`XGBoost`, `LightGBM`, `CatBoost`), isotonic probability calibration, asymmetric financial cost-minimization, local/global TreeSHAP explainability, and containerized deployment with FastAPI and Streamlit.
 
@@ -176,6 +179,15 @@ docker-compose up --build
 ```
 
 Access the Streamlit Dashboard at `http://localhost:7860` and API docs at `http://localhost:8000/docs`.
+
+### Free 1-Click Cloud Deployment (Streamlit Community Cloud)
+1. Go to [share.streamlit.io](https://share.streamlit.io/) and sign in with your GitHub account.
+2. Click **New app** and select:
+   - **Repository:** `Unknown122-coder/credit-card-fraud-detection-system`
+   - **Branch:** `main`
+   - **Main file path:** `app/ui/streamlit_app.py`
+   - **Custom subdomain (optional):** `credit-card-fraud-detection-system`
+3. Click **Deploy!** Your app will be live at `https://credit-card-fraud-detection-system.streamlit.app` (or your chosen URL).
 
 ### Deploying to Hugging Face Spaces (Free Tier)
 1. Create a new Space on [Hugging Face](https://huggingface.co/spaces) selecting the **Docker** SDK.
