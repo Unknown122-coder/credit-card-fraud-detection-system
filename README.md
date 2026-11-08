@@ -1,6 +1,6 @@
 # 🛡️ End-to-End Credit Card Fraud Detection System
 
-[![CI Pipeline](https://github.com/your-username/credit-card-fraud-detection/actions/workflows/ci.yml/badge.svg)](https://github.com/your-username/credit-card-fraud-detection/actions)
+[![CI Pipeline](https://github.com/Unknown122-coder/credit-card-fraud-detection-system/actions/workflows/ci.yml/badge.svg)](https://github.com/Unknown122-coder/credit-card-fraud-detection-system/actions)
 [![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/downloads/release/python-3110/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.111.0-009688.svg?logo=fastapi)](https://fastapi.tiangolo.com)
@@ -119,8 +119,8 @@ Because features $V_1$–$V_{28}$ are PCA-anonymized, this system groups them in
 
 ```bash
 # 1. Clone repository
-git clone https://github.com/your-username/credit-card-fraud-detection.git
-cd credit-card-fraud-detection
+git clone https://github.com/Unknown122-coder/credit-card-fraud-detection-system.git
+cd credit-card-fraud-detection-system
 
 # 2. Setup environment
 make setup
