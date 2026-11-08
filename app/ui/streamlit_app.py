@@ -214,27 +214,24 @@ def sanitize_csv_injection(df_to_clean: pd.DataFrame) -> pd.DataFrame:
 
 
 @st.cache_resource
-def _get_or_rebuild_explainer(_local: Any, force: bool = False) -> Optional[Any]:
-    """Rebuild SHAP TreeExplainer when the pickled one is version-incompatible.
+def _rebuild_explainer(_local: Any) -> Optional[Any]:
+    """Build a fresh explainer when the serialized one cannot run in this environment.
 
-    Uses Streamlit's cache so this only runs once per session.
+    Reuses the background sample carried by the serialized explainer so the
+    rebuilt backend keeps the original attribution reference point. Streamlit's
+    cache keeps this to once per session.
     """
-    if not force and _local.explainer is not None:
-        return _local.explainer
-
     try:
-        import shap
+        from src.explain.shap_utils import build_explainer_for_model, extract_background
 
-        pipeline = _local.pipeline
-        estimator = pipeline
-        if hasattr(pipeline, "named_steps"):
-            if "classifier" in pipeline.named_steps:
-                estimator = pipeline.named_steps["classifier"]
-            elif len(pipeline.steps) > 0:
-                estimator = pipeline.steps[-1][1]
-
-        explainer = shap.TreeExplainer(estimator)
-        logger.info("Rebuilt SHAP TreeExplainer in-process for cloud compatibility")
+        explainer = build_explainer_for_model(
+            _local.pipeline, background=extract_background(_local.explainer)
+        )
+        if explainer is not None:
+            logger.info(
+                "Rebuilt %s in-process for runtime compatibility",
+                type(explainer).__name__,
+            )
         return explainer
     except Exception as exc:
         logger.error(f"Failed to rebuild SHAP explainer: {exc}")
@@ -296,25 +293,26 @@ def call_explain(payload: dict[str, Any]) -> Optional[dict[str, Any]]:
 
             df = pd.DataFrame([payload["transaction"]])[FEATURE_COLS]
 
-            # Use the cached explainer, or rebuild if deserialized one is incompatible
-            explainer = local.explainer
-            if explainer is None:
-                explainer = _get_or_rebuild_explainer(local)
-            if explainer is None:
-                st.warning(
-                    "SHAP explainer not available. Generate one locally with: `make explain`"
-                )
-                return None
+            # Prefer the serialized explainer, but fall back to one rebuilt
+            # in-process when the installed shap/booster versions cannot read it
+            explanation = None
+            if local.explainer is not None:
+                try:
+                    explanation = compute_local_explanation(
+                        local.explainer, df, top_n=10, pipeline=local.pipeline
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        f"Serialized SHAP explainer unusable in this environment: {exc}"
+                    )
 
-            try:
-                explanation = compute_local_explanation(
-                    explainer, df, top_n=10, pipeline=local.pipeline
-                )
-            except (AttributeError, TypeError):
-                # Pickled explainer version mismatch — rebuild from live model
-                explainer = _get_or_rebuild_explainer(local, force=True)
+            if explanation is None:
+                explainer = _rebuild_explainer(local)
                 if explainer is None:
-                    st.warning("Could not rebuild SHAP explainer for this environment.")
+                    st.warning(
+                        "SHAP attribution is unavailable in this environment. "
+                        "Generate the explainer locally with: `make explain`"
+                    )
                     return None
                 explanation = compute_local_explanation(
                     explainer, df, top_n=10, pipeline=local.pipeline

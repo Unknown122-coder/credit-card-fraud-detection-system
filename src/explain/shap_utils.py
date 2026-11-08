@@ -9,8 +9,9 @@ Provides:
 
 from __future__ import annotations
 
+import inspect
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 import joblib
 import matplotlib
@@ -90,6 +91,16 @@ def transform_features_through_pipeline(
     return np.asarray(X)
 
 
+def extract_tree_estimator(model: Any) -> Any:
+    """Return the final tree estimator of a pipeline, or the model itself if bare."""
+    if hasattr(model, "named_steps"):
+        if "classifier" in model.named_steps:
+            return model.named_steps["classifier"]
+        if len(model.steps) > 0:
+            return model.steps[-1][1]
+    return model
+
+
 def create_explainer(
     model: BaseEstimator,
     X_background: pd.DataFrame | np.ndarray,
@@ -101,12 +112,7 @@ def create_explainer(
     Extracts the underlying tree estimator and transforms the background data
     through the pipeline's preprocessing steps to guarantee attribution validity.
     """
-    estimator = model
-    if hasattr(model, "named_steps"):
-        if "classifier" in model.named_steps:
-            estimator = model.named_steps["classifier"]
-        elif len(model.steps) > 0:
-            estimator = model.steps[-1][1]
+    estimator = extract_tree_estimator(model)
 
     # Convert background to DataFrame/array and subsample
     if isinstance(X_background, pd.DataFrame):
@@ -150,6 +156,150 @@ def create_explainer(
         )
 
 
+def extract_background(explainer: Any) -> Optional[np.ndarray]:
+    """Recover the background matrix held by a serialized explainer.
+
+    The background array is plain numerical data, so it survives a pickle whose
+    explainer internals are no longer readable by the installed shap release.
+    This lets a rebuilt explainer keep the original attribution reference point.
+    """
+    data = getattr(explainer, "data", None)
+    if data is None:
+        return None
+    try:
+        arr = np.asarray(data, dtype=float)
+    except (TypeError, ValueError):
+        return None
+    if arr.ndim != 2 or arr.size == 0:
+        return None
+    return arr
+
+
+def _margin_scoring_function(estimator: Any) -> Callable[[Any], np.ndarray]:
+    """Return a single-output scoring function, preferring raw margin (log-odds) space.
+
+    Margin output keeps the fallback explainer on the same scale as TreeExplainer,
+    so base values and attributions stay comparable across explainer backends.
+    """
+    predict = getattr(estimator, "predict", None)
+    if predict is not None:
+        try:
+            params = set(inspect.signature(predict).parameters)
+        except (TypeError, ValueError):
+            params = set()
+        if "output_margin" in params:  # XGBoost
+            return lambda data: np.asarray(predict(data, output_margin=True))
+        if "raw_score" in params:  # LightGBM
+            return lambda data: np.asarray(predict(data, raw_score=True))
+
+    if hasattr(estimator, "decision_function"):
+        return lambda data: np.asarray(estimator.decision_function(data))
+    return lambda data: np.asarray(estimator.predict_proba(data))[:, 1]
+
+
+def build_explainer_for_model(
+    model: Any,
+    background: Optional[np.ndarray] = None,
+    max_background: int = 50,
+) -> Optional[Any]:
+    """Build an explainer for ``model`` that works under the installed library versions.
+
+    Serialized explainers and boosters are version-sensitive: a deployment that
+    resolves a newer shap or xgboost than the one that trained the model can fail
+    to read them (e.g. shap cannot parse a newer booster's ``base_score``). This
+    tries, in order, a freshly constructed TreeExplainer and then a model-agnostic
+    permutation explainer, which needs only a predict call and a background sample.
+
+    Returns ``None`` only when no explainer backend can be constructed at all.
+
+    Parameters
+    ----------
+    model:
+        Trained pipeline or bare estimator.
+    background:
+        Reference sample in the estimator's feature space (i.e. already passed
+        through the pipeline's transformers). Required for the fallback backend.
+    max_background:
+        Cap on background rows used by the fallback, bounding explanation latency.
+    """
+    estimator = extract_tree_estimator(model)
+
+    try:
+        explainer = shap.TreeExplainer(estimator)
+        logger.info("Rebuilt TreeExplainer on %s", type(estimator).__name__)
+        return explainer
+    except Exception as exc:
+        logger.warning(
+            "TreeExplainer rebuild failed on %s (%s). Trying model-agnostic fallback",
+            type(estimator).__name__,
+            exc,
+        )
+
+    if background is None or len(background) == 0:
+        logger.error("No background sample available for model-agnostic fallback")
+        return None
+
+    try:
+        explainer = shap.Explainer(
+            _margin_scoring_function(estimator), background[:max_background]
+        )
+        logger.info(
+            "Built model-agnostic %s fallback on %d background rows",
+            type(explainer).__name__,
+            min(len(background), max_background),
+        )
+        return explainer
+    except Exception as exc:
+        logger.error("Model-agnostic explainer construction failed: %s", exc)
+        return None
+
+
+def _select_positive_class(vals: Any) -> np.ndarray:
+    """Reduce multi-class SHAP output to the positive (fraud) class matrix."""
+    if isinstance(vals, list):
+        # List of [class_0, class_1]
+        return np.asarray(vals[1] if len(vals) > 1 else vals[0])
+
+    arr = np.asarray(vals)
+    if arr.ndim == 3:
+        # Array of shape (n_samples, n_features, n_classes)
+        return arr[:, :, 1] if arr.shape[2] > 1 else arr[:, :, 0]
+    return arr
+
+
+def _compute_shap_with_base(
+    explainer: Any,
+    X: pd.DataFrame | np.ndarray,
+) -> tuple[np.ndarray, Optional[float]]:
+    """Compute the positive-class SHAP matrix plus the base value for a single row.
+
+    The base value is read off the returned Explanation when present, because
+    model-agnostic explainers (e.g. PermutationExplainer) expose no
+    ``expected_value`` attribute. The scalar is only meaningful for single-row
+    input, which is how the local explanation path calls this.
+    """
+    shap_vals = (
+        explainer(X) if hasattr(explainer, "__call__") else explainer.shap_values(X)
+    )
+
+    base: Optional[float] = None
+    if hasattr(shap_vals, "values"):
+        raw_base = getattr(shap_vals, "base_values", None)
+        if raw_base is not None:
+            base_arr = np.asarray(raw_base, dtype=float)
+            if base_arr.ndim == 2:  # (n_samples, n_classes)
+                base_arr = base_arr[0]
+            if base_arr.ndim == 1 and base_arr.size > 1:  # per-class base values
+                base = float(base_arr[1])
+            elif base_arr.size:
+                base = float(base_arr.reshape(-1)[0])
+        vals = shap_vals.values
+    else:
+        vals = shap_vals
+
+    return _select_positive_class(vals), base
+
+
 def compute_shap_values(
     explainer: shap.Explainer,
     X: pd.DataFrame | np.ndarray,
@@ -168,24 +318,8 @@ def compute_shap_values(
     np.ndarray
         Array of shape (n_samples, n_features).
     """
-    shap_vals = (
-        explainer(X) if hasattr(explainer, "__call__") else explainer.shap_values(X)
-    )
-
-    if hasattr(shap_vals, "values"):
-        vals = shap_vals.values
-    else:
-        vals = shap_vals
-
-    # Handle multi-class / binary classification output
-    if isinstance(vals, list):
-        # List of [class_0, class_1]
-        vals = vals[1] if len(vals) > 1 else vals[0]
-    elif isinstance(vals, np.ndarray) and vals.ndim == 3:
-        # Array of shape (n_samples, n_features, n_classes)
-        vals = vals[:, :, 1] if vals.shape[2] > 1 else vals[:, :, 0]
-
-    return np.asarray(vals)
+    vals, _ = _compute_shap_with_base(explainer, X)
+    return vals
 
 
 def generate_global_plots(
@@ -281,14 +415,19 @@ def compute_local_explanation(
     else:
         X_eval = X_single
 
-    shap_vals = compute_shap_values(explainer, X_eval)[0]
+    shap_matrix, explanation_base = _compute_shap_with_base(explainer, X_eval)
+    shap_vals = shap_matrix[0]
 
-    # Expected value (base value)
-    base_val = explainer.expected_value
-    if isinstance(base_val, (list, np.ndarray)):
-        base_val = float(base_val[1]) if len(base_val) > 1 else float(base_val[0])
+    # Expected value (base value): read from the Explanation when the explainer
+    # exposes no expected_value (true of model-agnostic fallback backends)
+    if explanation_base is not None:
+        base_val = explanation_base
     else:
-        base_val = float(base_val)
+        raw_base = explainer.expected_value
+        if isinstance(raw_base, (list, np.ndarray)):
+            base_val = float(raw_base[1]) if len(raw_base) > 1 else float(raw_base[0])
+        else:
+            base_val = float(raw_base)
 
     feature_names = list(X_single.columns)
     feature_values = X_single.iloc[0].values
